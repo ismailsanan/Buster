@@ -12,21 +12,21 @@ Inspired by [gobuster](https://github.com/OJ/gobuster) and [feroxbuster](https:/
 
 ## Modes
 
-### Dir {recursive directory & file discovery}
+### Dir (recursive directory & file discovery)
 Brute-forces paths against a target, and **recurses into discovered directories** rather than a single flat pass.
 
 * wildcard path in each directory before scanning it, so catch-all routing and custom error pages 
 * redirect aware directory detection  `301 → /admin/` is treated as the canonical
 * extension list (`.php`, `.bak`, `.env`, …), configurable recursion depth, and duplicate-response collapsing
 
-### Vhost — virtual host enumeration
+### Vhost  (virtual host enumeration)
 Sends requests to one target IP while varying the **Host header**, revealing virtual hosts served from the same address.
 
 * built-in wildcard-vhost detection  baselines with a garbage Host value and only reports candidates whose response actually differs
 
 * Burp cleanly separates the connection target from the Host header, so you point at an IP and ask it for `dev.target.com`, `staging.target.com`,  on the same connection
 
-### DNS  active subdomain brute-forcing
+### DNS  (active subdomain brute-forcing)
 Resolves candidate subdomains against a base domain and reports the ones that exist, with their resolved IPs.
 
 ---
