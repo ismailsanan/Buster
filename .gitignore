@@ -22,3 +22,32 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+# Maven build output
+target/
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse (in case you or a contributor uses it)
+.classpath
+.project
+.settings/
+bin/
+
+# VS Code
+.vscode/
+
+# Compiled class files
+*.class
+
+# Build artifacts / logs
+*.jar
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
