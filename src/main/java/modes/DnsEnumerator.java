@@ -12,11 +12,9 @@ import java.util.function.Consumer;
 /**
  * active subdomain enumeration by DNS resolution
  *
- * this is the one mode that does NOT use HttpEngine, because it is a
+ * this mode that does NOT use HttpEngine, because it is a
  * resolution problem not an HTTP one, InetAddress.getByName either resolves
  * the name or throws, a resolved name means the subdomain exists
- *
- * the gap this fills, existing Burp subdomain tools only EXTRACT names
  * already seen in traffic, none actively bruteforce DNS
  *
  * getByName is blocking with OS level timeout behaviour, so it runs in the

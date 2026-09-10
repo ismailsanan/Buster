@@ -9,11 +9,6 @@ import java.util.List;
 
 /**
  * reusable headers / cookie input, shared by the HTTP modes
- *
- * paste full header lines or a bare cookie string, these are attached to
- * every request the scan sends, which is what makes authenticated content
- * discovery work
- *
  * collapsed by default so it doesnt clutter the panel, expand when you need
  * to add a session
  */

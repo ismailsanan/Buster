@@ -94,8 +94,6 @@ public class DirEnumerator {
     }
 
     // probe a random path, log what the server does with it
-    // if the probe fails we return a "trust the status code" baseline rather
-    // than a soft-404 one, so a failed probe never causes everything to be filtered
     private Baseline calibrate(String dirUrl) {
         String probe = dirUrl + "zzz-does-not-exist-" + System.nanoTime();
         HttpRequestResponse r = engine.sendOnce(probe);
@@ -151,7 +149,6 @@ public class DirEnumerator {
             String finalUrl = finalUrlOf(r, url);
             boolean isDir = isDirectory(url, finalUrl, status);
             // show the redirect target whenever the response is a 3xx,
-            // regardless of whether we treat it as a directory
             String redirect = (status >= 300 && status < 400) ? finalUrl : "";
             hits.add(EnumResult.http(url, redirect, status, length,
                     isDir ? "dir" : "file", r));

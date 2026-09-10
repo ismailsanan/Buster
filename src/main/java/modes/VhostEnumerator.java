@@ -11,15 +11,9 @@ import java.util.function.Consumer;
 
 /**
  * virtual host enumeration
- *
  * sends the same request to one target but varies the Host header, a real
  * vhost is one whose response differs from a baseline captured with a
  * garbage Host value
- *
- * the win over external gobuster is that Burp lets the connection target and
- * the Host header be different cleanly, so you point at an IP and ask it for
- * candidate.target.com, dev.target.com, etc, all on the same connection
- *
  * wildcard vhost detection is built in, if the server returns the SAME
  * response for the garbage baseline as for real candidates, every candidate
  * would look like a hit, so we only report a candidate whose body differs

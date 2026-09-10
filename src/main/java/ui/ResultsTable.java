@@ -18,15 +18,11 @@ import java.util.List;
 import static burp.api.montoya.ui.editor.EditorOptions.READ_ONLY;
 
 /**
- * results table styled after gobuster's output
  *
  * columns: Result, Status, Size, Redirect
  * a live status banner across the top shows what the scan is doing
  * status colour coded 2xx green 3xx cyan 401/403 yellow 5xx red
- *
  * clicking a row shows the full request and response in Burp's native
- * editors below the table, so a finding can be inspected or sent onward
- * exactly like anywhere else in Burp
  */
 public class ResultsTable {
 

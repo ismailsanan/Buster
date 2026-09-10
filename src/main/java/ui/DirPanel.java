@@ -11,10 +11,6 @@ import java.util.List;
 
 /**
  * dir mode tab
- *
- * results and the request/response viewer take the LEFT (main area),
- * a compact config column sits on the RIGHT with a tabbed Wordlist / Headers
- * section, Start turns into Running while a scan is active
  */
 public class DirPanel {
 

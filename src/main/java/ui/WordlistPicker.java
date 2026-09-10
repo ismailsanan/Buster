@@ -9,14 +9,6 @@ import java.util.List;
 
 /**
  * Intruder style wordlist input, reused by every mode
- *
- * a scrollable text area you can paste directly into, plus a Load File
- * button that reads a local file into that same area, plus Clear
- *
- * no bundled lists, no assumed paths, the user brings their own list from
- * SecLists or wherever, which is the only sane choice for a tool that also
- * runs on Windows
- *
  * resolve() hands back the parsed words from whatever is currently in the box
  */
 public class WordlistPicker {
