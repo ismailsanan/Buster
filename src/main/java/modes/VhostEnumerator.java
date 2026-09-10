@@ -16,6 +16,10 @@ import java.util.function.Consumer;
  * vhost is one whose response differs from a baseline captured with a
  * garbage Host value
  *
+ * the win over external gobuster is that Burp lets the connection target and
+ * the Host header be different cleanly, so you point at an IP and ask it for
+ * candidate.target.com, dev.target.com, etc, all on the same connection
+ *
  * wildcard vhost detection is built in, if the server returns the SAME
  * response for the garbage baseline as for real candidates, every candidate
  * would look like a hit, so we only report a candidate whose body differs
@@ -29,19 +33,26 @@ public class VhostEnumerator {
 
     public void cancel() { if (engine != null) engine.cancel(); }
 
-
+    /**
+     * @param target    IP or hostname to connect to, e.g. https://10.0.0.5
+     * @param domain    base domain appended to each word, e.g. "target.com"
+     *                  each candidate Host becomes word + "." + domain
+     * @param wordlist  subdomain words
+     */
     public void scan(
             String target,
             String domain,
             List<String> wordlist,
             int threads,
-            Consumer<EnumResult> onHit) {
+            Consumer<EnumResult> onHit,
+            Consumer<String> onStatus) {
 
         engine = new HttpEngine(api, threads, 6);
         String url = normalize(target);
 
         // baseline with a Host that cannot exist
         Baseline baseline = new BaselineDetector(engine).forVhost(url);
+        onStatus.accept("scanning " + url + " with " + wordlist.size() + " hosts ...");
         api.logging().logToOutput("[VHOST] baseline status=" + baseline.status()
                 + " length=" + baseline.length());
 
@@ -66,10 +77,11 @@ public class VhostEnumerator {
             // a real vhost differs from the garbage baseline
             if (!baseline.differsFrom(status, length)) continue;
 
-            onHit.accept(EnumResult.http(hosts.get(i), "Host header", status, length, "vhost"));
+            onHit.accept(EnumResult.http(hosts.get(i), "", status, length, "vhost", r));
         }
 
         engine.shutdown();
+        onStatus.accept(engine.isCancelled() ? "stopped" : "done");
         api.logging().logToOutput("[VHOST] finished");
     }
 

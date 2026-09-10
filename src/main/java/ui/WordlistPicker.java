@@ -13,6 +13,9 @@ import java.util.List;
  * a scrollable text area you can paste directly into, plus a Load File
  * button that reads a local file into that same area, plus Clear
  *
+ * no bundled lists, no assumed paths, the user brings their own list from
+ * SecLists or wherever, which is the only sane choice for a tool that also
+ * runs on Windows
  *
  * resolve() hands back the parsed words from whatever is currently in the box
  */
@@ -38,7 +41,7 @@ public class WordlistPicker {
 
         load.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
-            if (chooser.showOpenDialog(panel) == JFileChooser.APPROVE_OPTION) {
+            if (chooser.showOpenDialog((Component) e.getSource()) == JFileChooser.APPROVE_OPTION) {
                 File f = chooser.getSelectedFile();
                 area.setText(Wordlists.readFile(f.toPath()));
                 updateCount();
@@ -56,7 +59,6 @@ public class WordlistPicker {
         panel = new JPanel(new BorderLayout());
         panel.add(buttons, BorderLayout.NORTH);
         panel.add(new JScrollPane(area), BorderLayout.CENTER);
-        panel.setPreferredSize(new Dimension(600, 150));
     }
 
     public JComponent getComponent() { return panel; }

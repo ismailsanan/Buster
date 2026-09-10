@@ -4,6 +4,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 
+import java.util.List;
 import java.util.concurrent.*;
 
 /**
@@ -13,20 +14,30 @@ import java.util.concurrent.*;
  * Montoya sendRequest cannot be interrupted so the timeout stops us waiting,
  * the request may still finish in the background
  *
- * submit(url)             normal request (dir)
- * submit(url, hostHeader) Host header differs from the connection target
- *                         (vhost) which external gobuster cannot do cleanly
+ * custom headers (cookies, auth tokens, user agent) are set once at
+ * construction and applied to every request, so authenticated content
+ * discovery works, point it at a session cookie or Authorization header and
+ * every path is requested as the logged in user
  */
 public class HttpEngine {
 
     private final MontoyaApi api;
     private final ExecutorService pool;
     private final int timeoutSeconds;
+    private final List<HeaderKV> headers;
     private volatile boolean cancelled = false;
 
+    // simple name/value pair, avoids depending on a Montoya HttpHeader type here
+    public record HeaderKV(String name, String value) {}
+
     public HttpEngine(MontoyaApi api, int threads, int timeoutSeconds) {
+        this(api, threads, timeoutSeconds, List.of());
+    }
+
+    public HttpEngine(MontoyaApi api, int threads, int timeoutSeconds, List<HeaderKV> headers) {
         this.api = api;
         this.timeoutSeconds = timeoutSeconds;
+        this.headers = headers == null ? List.of() : headers;
         this.pool = Executors.newFixedThreadPool(threads);
     }
 
@@ -34,13 +45,24 @@ public class HttpEngine {
     public boolean isCancelled(){ return cancelled; }
     public void shutdown()      { pool.shutdownNow(); }
 
+    // build a request with all custom headers applied
+    // withHeader replaces an existing header of the same name, so a custom
+    // Cookie or User-Agent overrides Burp's default rather than duplicating it
+    private HttpRequest build(String url) {
+        HttpRequest req = HttpRequest.httpRequestFromUrl(url);
+        for (HeaderKV h : headers) {
+            req = req.withHeader(h.name(), h.value());
+        }
+        return req;
+    }
+
     public Future<HttpRequestResponse> submit(String url) {
-        return pool.submit(() -> api.http().sendRequest(HttpRequest.httpRequestFromUrl(url)));
+        return pool.submit(() -> api.http().sendRequest(build(url)));
     }
 
     public Future<HttpRequestResponse> submit(String url, String hostHeader) {
         return pool.submit(() -> {
-            HttpRequest req = HttpRequest.httpRequestFromUrl(url).withHeader("Host", hostHeader);
+            HttpRequest req = build(url).withHeader("Host", hostHeader);
             return api.http().sendRequest(req);
         });
     }

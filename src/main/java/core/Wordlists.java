@@ -2,6 +2,9 @@ package core;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -30,12 +33,23 @@ public class Wordlists {
         return words;
     }
 
-    // read a local file into raw text, used by the Load File button
-    // the UI drops the text into the same box the user could paste into,
-    // so file and paste both flow through parse()
     public static String readFile(Path path) {
         try {
-            return Files.readString(path);
+            byte[] bytes = Files.readAllBytes(path);
+
+            int offset = (bytes.length >= 3
+                    && (bytes[0] & 0xFF) == 0xEF
+                    && (bytes[1] & 0xFF) == 0xBB
+                    && (bytes[2] & 0xFF) == 0xBF) ? 3 : 0;
+
+            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPLACE)
+                    .onUnmappableCharacter(CodingErrorAction.REPLACE);
+
+            return decoder.decode(
+                    java.nio.ByteBuffer.wrap(bytes, offset, bytes.length - offset)
+            ).toString();
+
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

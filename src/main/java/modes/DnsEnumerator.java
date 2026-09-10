@@ -15,6 +15,13 @@ import java.util.function.Consumer;
  * this is the one mode that does NOT use HttpEngine, because it is a
  * resolution problem not an HTTP one, InetAddress.getByName either resolves
  * the name or throws, a resolved name means the subdomain exists
+ *
+ * the gap this fills, existing Burp subdomain tools only EXTRACT names
+ * already seen in traffic, none actively bruteforce DNS
+ *
+ * getByName is blocking with OS level timeout behaviour, so it runs in the
+ * same pool + future timeout pattern as everything else, just resolving
+ * instead of requesting
  */
 public class DnsEnumerator {
 
@@ -29,10 +36,15 @@ public class DnsEnumerator {
         if (pool != null) pool.shutdownNow();
     }
 
-
-    public void scan(String domain, List<String> wordlist, int threads, Consumer<EnumResult> onHit) {
+    /**
+     * @param domain    base domain, e.g. "target.com"
+     * @param wordlist  subdomain words, each becomes word + "." + domain
+     */
+    public void scan(String domain, List<String> wordlist, int threads,
+                     Consumer<EnumResult> onHit, Consumer<String> onStatus) {
         cancelled = false;
         pool = Executors.newFixedThreadPool(threads);
+        onStatus.accept("resolving " + wordlist.size() + " names under " + domain + " ...");
 
         List<String> names = new java.util.ArrayList<>();
         List<Future<String>> futures = new java.util.ArrayList<>();
@@ -51,6 +63,7 @@ public class DnsEnumerator {
         }
 
         pool.shutdownNow();
+        onStatus.accept(cancelled ? "stopped" : "done");
         api.logging().logToOutput("[DNS] finished");
     }
 

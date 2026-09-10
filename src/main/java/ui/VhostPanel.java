@@ -5,79 +5,73 @@ import burp.api.montoya.MontoyaApi;
 import modes.VhostEnumerator;
 
 import javax.swing.*;
-import java.awt.*;
 import java.util.List;
 
-/** vhost mode tab, paste or load a subdomain wordlist */
+/** vhost mode tab, results left, config right */
 public class VhostPanel {
 
     private final MontoyaApi api;
     private final JPanel panel;
 
-    private final JTextField target = new JTextField("https://10.0.0.5", 24);
-    private final JTextField domain = new JTextField("target.com", 20);
-    private final JSpinner threads  = new JSpinner(new SpinnerNumberModel(20, 1, 100, 1));
+    private final JTextField target = new JTextField("https://10.0.0.5");
+    private final JTextField domain = new JTextField("target.com");
+    private final JSpinner threads  = new JSpinner(new SpinnerNumberModel(10, 1, 50, 1));
 
     private final WordlistPicker wordlist =
             new WordlistPicker("Paste subdomain words one per line, or Load File");
-    private final ResultsTable results = new ResultsTable();
-    private final JLabel status = new JLabel("Idle");
+    private final ResultsTable results;
+
+    private final JButton startBtn = new JButton("Start");
+    private final JButton stopBtn  = new JButton("Stop");
 
     private VhostEnumerator scan;
 
-    public VhostPanel(MontoyaApi api) { this.api = api; this.panel = build(); }
+    public VhostPanel(MontoyaApi api) {
+        this.api = api;
+        this.results = new ResultsTable(api);
+        this.panel = Layouts.modePanel(results, buildConfig());
+    }
 
     public JComponent getComponent() { return panel; }
     public void cancel() { if (scan != null) scan.cancel(); }
 
-    private JPanel build() {
-        JPanel opts = new JPanel();
-        opts.setLayout(new BoxLayout(opts, BoxLayout.Y_AXIS));
-        opts.add(row(new JLabel("Target (IP/host):"), target,
-                     new JLabel("Base domain:"), domain, new JLabel("Threads:"), threads));
-        opts.add(controls());
+    private JComponent buildConfig() {
+        Layouts.Form form = new Layouts.Form();
+        form.field("Target (IP/host)", target);
+        form.field("Base domain", domain);
+        form.row("Threads", threads, " ", new JLabel());
+        form.buttons(startBtn, stopBtn);
 
-        JSplitPane inputSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                opts, wordlist.getComponent());
-        inputSplit.setResizeWeight(0.0);
+        startBtn.addActionListener(e -> start());
+        stopBtn.addActionListener(e -> { cancel(); results.status("stopping..."); });
 
-        JSplitPane main = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                inputSplit, results.getComponent());
-        main.setResizeWeight(0.35);
+        JTabbedPane inputs = new JTabbedPane();
+        inputs.addTab("Wordlist", wordlist.getComponent());
 
-        JPanel p = new JPanel(new BorderLayout());
-        p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        p.add(main, BorderLayout.CENTER);
-        return p;
-    }
-
-    private JPanel controls() {
-        JButton start = new JButton("Start");
-        JButton stop  = new JButton("Stop");
-        start.addActionListener(e -> start());
-        stop.addActionListener(e -> { cancel(); status.setText("Stopping..."); });
-        return row(start, stop, status);
+        return Layouts.config(form.build(), inputs);
     }
 
     private void start() {
-        if (target.getText().isBlank()) { status.setText("Enter a target"); return; }
+        if (target.getText().isBlank()) { results.status("enter a target"); return; }
+        running(true);
         new Thread(() -> {
             try {
                 List<String> words = wordlist.resolve();
-                status.setText("Running (" + words.size() + " hosts)");
                 scan = new VhostEnumerator(api);
                 scan.scan(target.getText().trim(), domain.getText().trim(),
-                        words, (int) threads.getValue(), results::addHit);
-                status.setText("Done");
+                        words, (int) threads.getValue(), results::addHit, results::status);
             } catch (Exception ex) {
-                status.setText(ex.getMessage());
+                results.status("error: " + ex.getMessage());
+            } finally {
+                running(false);
             }
         }).start();
     }
 
-    private JPanel row(Component... cs) {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        for (Component c : cs) p.add(c);
-        return p;
+    private void running(boolean on) {
+        SwingUtilities.invokeLater(() -> {
+            startBtn.setText(on ? "Running..." : "Start");
+            startBtn.setEnabled(!on);
+        });
     }
 }
