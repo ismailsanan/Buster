@@ -21,7 +21,7 @@ Inspired by [gobuster](https://github.com/OJ/gobuster) and [feroxbuster](https:/
 
 ## Wordlists
 
-An Intruder style box in each mode. Paste words straight in, or hit Load File to pull in a local list such as [SecLists](https://github.com/danielmiessler/SecLists). Nothing is bundled and no paths are assumed, so it behaves the same on Windows, macOS, and Linux.
+An Intruder style box in each mode. Paste words straight in, or hit Load File to pull in a local list such as [SecLists](https://github.com/danielmiessler/SecLists).
 
 
 ## Results
