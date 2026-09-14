@@ -10,7 +10,7 @@ The idea is simple. Take the enumeration you'd normally do with standalone tools
 Inspired by [gobuster](https://github.com/OJ/gobuster) and [feroxbuster](https://github.com/epi052/feroxbuster).
 
 
-[POC.webm](https://github.com/user-attachments/assets/b64ac9ab-cb91-48b1-81c4-18433f3bf9bf)
+[POC.webm](https://github.com/user-attachments/assets/3b3ad8f9-61bd-48d0-8a0e-2db61ae4964d)
 
 
 
