@@ -9,6 +9,7 @@ The idea is simple. Take the enumeration you'd normally do with standalone tools
 
 Inspired by [gobuster](https://github.com/OJ/gobuster) and [feroxbuster](https://github.com/epi052/feroxbuster).
 
+<img width="1867" height="782" alt="POC" src="https://github.com/user-attachments/assets/81917438-0583-4812-9c13-598a4ce65f05" />
 
 
 ## Modes
