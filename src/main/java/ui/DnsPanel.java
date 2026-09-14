@@ -2,12 +2,11 @@ package ui;
 
 import burp.api.montoya.MontoyaApi;
 
+import core.WordlistSource;
 import modes.DnsEnumerator;
 
 import javax.swing.*;
-import java.util.List;
 
-/** dns mode tab, results left, config right */
 public class DnsPanel {
 
     private final MontoyaApi api;
@@ -18,7 +17,7 @@ public class DnsPanel {
 
     private final WordlistPicker wordlist =
             new WordlistPicker("Paste subdomain words one per line, or Load File");
-    private final ResultsTable results;
+    private final DnsResultsTable results = new DnsResultsTable();
 
     private final JButton startBtn = new JButton("Start");
     private final JButton stopBtn  = new JButton("Stop");
@@ -27,14 +26,13 @@ public class DnsPanel {
 
     public DnsPanel(MontoyaApi api) {
         this.api = api;
-        this.results = new ResultsTable(api);
-        this.panel = Layouts.modePanel(results, buildConfig());
+        this.panel = build();
     }
 
     public JComponent getComponent() { return panel; }
     public void cancel() { if (scan != null) scan.cancel(); }
 
-    private JComponent buildConfig() {
+    private JPanel build() {
         Layouts.Form form = new Layouts.Form();
         form.field("Base domain", domain);
         form.row("Threads", threads, " ", new JLabel());
@@ -46,7 +44,7 @@ public class DnsPanel {
         JTabbedPane inputs = new JTabbedPane();
         inputs.addTab("Wordlist", wordlist.getComponent());
 
-        return Layouts.config(form.build(), inputs);
+        return Layouts.modePanel(results.getComponent(), Layouts.config(form.build(), inputs));
     }
 
     private void start() {
@@ -54,7 +52,7 @@ public class DnsPanel {
         running(true);
         new Thread(() -> {
             try {
-                List<String> words = wordlist.resolve();
+                WordlistSource words = wordlist.resolve();
                 scan = new DnsEnumerator(api);
                 scan.scan(domain.getText().trim(), words, (int) threads.getValue(),
                         results::addHit, results::status);

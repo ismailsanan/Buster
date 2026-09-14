@@ -18,11 +18,7 @@ import java.util.List;
 import static burp.api.montoya.ui.editor.EditorOptions.READ_ONLY;
 
 /**
- *
- * columns: Result, Status, Size, Redirect
- * a live status banner across the top shows what the scan is doing
- * status colour coded 2xx green 3xx cyan 401/403 yellow 5xx red
- * clicking a row shows the full request and response in Burp's native
+ * results table for HTTP modes, columns Result / Status / Size / Redirect
  */
 public class ResultsTable {
 
@@ -32,9 +28,7 @@ public class ResultsTable {
     private final JLabel statusBanner = new JLabel("Idle");
     private int count = 0;
 
-    // the response behind each visible row, index aligned with the model
     private final List<HttpRequestResponse> exchanges = new ArrayList<>();
-
     private final HttpRequestEditor requestViewer;
     private final HttpResponseEditor responseViewer;
 
@@ -55,7 +49,6 @@ public class ResultsTable {
         table.getColumnModel().getColumn(3).setPreferredWidth(260);
         table.getColumnModel().getColumn(1).setCellRenderer(new StatusRenderer());
 
-        // Burp's own editors, read only, populated on row click
         requestViewer  = api.userInterface().createHttpRequestEditor(READ_ONLY);
         responseViewer = api.userInterface().createHttpResponseEditor(READ_ONLY);
 
@@ -63,8 +56,7 @@ public class ResultsTable {
             if (e.getValueIsAdjusting()) return;
             int viewRow = table.getSelectedRow();
             if (viewRow < 0) return;
-            int modelRow = table.convertRowIndexToModel(viewRow);
-            showExchange(modelRow);
+            showExchange(table.convertRowIndexToModel(viewRow));
         });
 
         statusBanner.setFont(new Font("Monospaced", Font.PLAIN, 12));
@@ -78,20 +70,16 @@ public class ResultsTable {
         clear.addActionListener(e -> clear());
 
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        bar.add(counter);
-        bar.add(copy);
-        bar.add(export);
-        bar.add(clear);
-
-        // table on top, request/response viewers below in a split
-        JTabbedPane viewers = new JTabbedPane();
-        viewers.addTab("Request", requestViewer.uiComponent());
-        viewers.addTab("Response", responseViewer.uiComponent());
+        bar.add(counter); bar.add(copy); bar.add(export); bar.add(clear);
 
         JPanel tableSide = new JPanel(new BorderLayout());
         tableSide.add(statusBanner, BorderLayout.NORTH);
         tableSide.add(new JScrollPane(table), BorderLayout.CENTER);
         tableSide.add(bar, BorderLayout.SOUTH);
+
+        JTabbedPane viewers = new JTabbedPane();
+        viewers.addTab("Request", requestViewer.uiComponent());
+        viewers.addTab("Response", responseViewer.uiComponent());
 
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tableSide, viewers);
         split.setResizeWeight(0.6);
@@ -108,7 +96,7 @@ public class ResultsTable {
 
     public void addHit(EnumResult hit) {
         SwingUtilities.invokeLater(() -> {
-            exchanges.add(hit.exchange());   // aligned with the new row
+            exchanges.add(hit.exchange());
             model.addRow(new Object[]{
                     hit.name(),
                     hit.status() == 0 ? "" : hit.status(),
@@ -131,11 +119,10 @@ public class ResultsTable {
         });
     }
 
-    // populate the request/response editors for the clicked row
     private void showExchange(int modelRow) {
         if (modelRow < 0 || modelRow >= exchanges.size()) return;
         HttpRequestResponse rr = exchanges.get(modelRow);
-        if (rr == null) return;   // dns rows have no exchange
+        if (rr == null) return;
         if (rr.request() != null)  requestViewer.setRequest(rr.request());
         if (rr.response() != null) responseViewer.setResponse(rr.response());
     }
@@ -143,7 +130,7 @@ public class ResultsTable {
     private static class StatusRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable t, Object value,
-                                                       boolean sel, boolean focus, int row, int col) {
+                boolean sel, boolean focus, int row, int col) {
             Component c = super.getTableCellRendererComponent(t, value, sel, focus, row, col);
             setHorizontalAlignment(CENTER);
             if (value == null || value.toString().isEmpty()) return c;
@@ -151,11 +138,11 @@ public class ResultsTable {
             try { status = Integer.parseInt(value.toString()); }
             catch (NumberFormatException e) { return c; }
             if (!sel) {
-                if (status >= 200 && status < 300)      c.setForeground(new Color(0, 150, 0));
-                else if (status >= 300 && status < 400) c.setForeground(new Color(0, 130, 160));
+                if (status >= 200 && status < 300)       c.setForeground(new Color(0, 150, 0));
+                else if (status >= 300 && status < 400)  c.setForeground(new Color(0, 130, 160));
                 else if (status == 401 || status == 403) c.setForeground(new Color(190, 150, 0));
-                else if (status >= 500)                 c.setForeground(new Color(190, 0, 0));
-                else                                    c.setForeground(Color.DARK_GRAY);
+                else if (status >= 500)                  c.setForeground(new Color(190, 0, 0));
+                else                                     c.setForeground(Color.DARK_GRAY);
             }
             return c;
         }
@@ -164,9 +151,9 @@ public class ResultsTable {
     private String tsv() {
         StringBuilder sb = new StringBuilder();
         for (int r = 0; r < model.getRowCount(); r++) {
-            for (int col = 0; col < model.getColumnCount(); col++) {
-                if (col > 0) sb.append("\t");
-                sb.append(model.getValueAt(r, col));
+            for (int c = 0; c < model.getColumnCount(); c++) {
+                if (c > 0) sb.append("\t");
+                sb.append(model.getValueAt(r, c));
             }
             sb.append("\n");
         }
@@ -185,8 +172,8 @@ public class ResultsTable {
         try (java.io.FileWriter w = new java.io.FileWriter(chooser.getSelectedFile())) {
             w.write("Result,Status,Size,Redirect\n");
             for (int r = 0; r < model.getRowCount(); r++) {
-                w.write(csv(model.getValueAt(r, 0)) + "," + model.getValueAt(r, 1) + ","
-                        + model.getValueAt(r, 2) + "," + csv(model.getValueAt(r, 3)) + "\n");
+                w.write(csv(model.getValueAt(r,0)) + "," + model.getValueAt(r,1) + ","
+                        + model.getValueAt(r,2) + "," + csv(model.getValueAt(r,3)) + "\n");
             }
         } catch (Exception ignored) {}
     }

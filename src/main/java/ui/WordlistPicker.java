@@ -1,51 +1,52 @@
 package ui;
 
+import core.WordlistSource;
 import core.Wordlists;
 
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Intruder style wordlist input, reused by every mode
- * resolve() hands back the parsed words from whatever is currently in the box
+ * wordlist input paste small lists or Load File for big ones
+ * a loaded file is NOT read into the box, only its path and line count are
+ * kept the scan streams it so large file can be loaded
  */
 public class WordlistPicker {
 
     private final JPanel panel;
-    private final JTextArea area = new JTextArea(6, 30);
+    private final JTextArea area = new JTextArea(8, 30);
     private final JLabel count = new JLabel("0 words");
+    private final JButton load;
+
+    private Path loadedFile = null;
+    private long loadedLines = 0;
 
     public WordlistPicker(String placeholder) {
-        area.setLineWrap(false);
         area.setFont(new Font("Monospaced", Font.PLAIN, 12));
         area.setToolTipText(placeholder);
 
-        // live word count as the user pastes or edits
-        area.getDocument().addUndoableEditListener(e -> updateCount());
-        area.addKeyListener(new java.awt.event.KeyAdapter() {
-            @Override public void keyReleased(java.awt.event.KeyEvent e) { updateCount(); }
+        area.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e)  { onEdit(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e)  { onEdit(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { onEdit(); }
         });
 
-        JButton load  = new JButton("Load File");
+        load          = new JButton("Load File");
         JButton clear = new JButton("Clear");
+        load.addActionListener(e -> loadFile((Component) e.getSource()));
+        clear.addActionListener(e -> { loadedFile = null; area.setText(""); });
 
-        load.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            if (chooser.showOpenDialog((Component) e.getSource()) == JFileChooser.APPROVE_OPTION) {
-                File f = chooser.getSelectedFile();
-                area.setText(Wordlists.readFile(f.toPath()));
-                updateCount();
-            }
-        });
-
-        clear.addActionListener(e -> { area.setText(""); updateCount(); });
+        JLabel hint = new JLabel("(paste with Ctrl+V)");
+        hint.setForeground(Color.GRAY);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         buttons.add(new JLabel("Wordlist:"));
         buttons.add(load);
         buttons.add(clear);
+        buttons.add(hint);
         buttons.add(count);
 
         panel = new JPanel(new BorderLayout());
@@ -55,15 +56,58 @@ public class WordlistPicker {
 
     public JComponent getComponent() { return panel; }
 
-    public List<String> resolve() {
+    public WordlistSource resolve() {
+        if (loadedFile != null) return WordlistSource.ofFile(loadedFile, loadedLines);
         List<String> words = Wordlists.parse(area.getText());
         if (words.isEmpty())
             throw new IllegalArgumentException("wordlist is empty, paste words or load a file");
-        return words;
+        return WordlistSource.ofList(words);
     }
 
-    private void updateCount() {
-        int n = Wordlists.parse(area.getText()).size();
-        count.setText(n + (n == 1 ? " word" : " words"));
+    private void loadFile(Component parent) {
+        JFileChooser chooser = new JFileChooser();
+        if (chooser.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) return;
+
+        File file = chooser.getSelectedFile();
+        load.setEnabled(false);
+        load.setText("Loading...");
+
+        new SwingWorker<Long, Void>() {
+            @Override protected Long doInBackground() {
+                return WordlistSource.countLines(file.toPath());
+            }
+            @Override protected void done() {
+                load.setEnabled(true);
+                load.setText("Load File");
+                try {
+                    long lines = get();
+                    if (lines < 0) {
+                        JOptionPane.showMessageDialog(parent, "Could not read the file",
+                                "Load failed", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                    loadedFile = file.toPath();
+                    loadedLines = lines;
+                    area.setText("# loaded " + file.getName() + "\n"
+                            + "# " + lines + " lines, streamed at scan time\n"
+                            + "# (type here to use a pasted list instead)\n");
+                    area.setCaretPosition(0);
+                    count.setText(lines + " words (file)");
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(parent, "Could not read the file: " + ex.getMessage(),
+                            "Load failed", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
+    private void onEdit() {
+        String text = area.getText();
+        boolean justNote = text.lines().allMatch(l -> l.isBlank() || l.startsWith("#"));
+        if (!justNote) {
+            loadedFile = null;
+            int n = Wordlists.parse(text).size();
+            count.setText(n + (n == 1 ? " word" : " words"));
+        }
     }
 }

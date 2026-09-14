@@ -1,14 +1,14 @@
 package core;
 
 /**
- * "nothing here" looks like, used by dir and vhost
+ * what "nothing here" looks like, used by dir and vhost
  * dir captures it per directory, vhost once with a garbage Host header
  */
 public record Baseline(int status, long length, boolean soft404) {
 
     private static final double TOLERANCE = 0.05;
 
-    // dir: clean server trusts status, soft 404 server compares length
+    // dir: clean server trusts status, soft404 server compares length
     public boolean isInteresting(int status, long length) {
         if (!soft404) return status != 404;
         if (status != this.status) return true;

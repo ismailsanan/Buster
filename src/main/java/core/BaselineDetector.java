@@ -4,10 +4,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 
 import java.security.SecureRandom;
 
-/**
- * calibration for dir and vhost
- * dir probes a random nonexistent path, vhost a random nonexistent Host
- */
+/** calibration for dir and vhost */
 public class BaselineDetector {
 
     private static final SecureRandom RANDOM = new SecureRandom();

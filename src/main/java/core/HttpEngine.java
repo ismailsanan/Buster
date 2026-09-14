@@ -8,16 +8,10 @@ import java.util.List;
 import java.util.concurrent.*;
 
 /**
- * one shared thread pool per scan, hard per request timeout
+ * one shared thread pool per scan, hard per-request timeout
  *
- * dispatch many, gather many, never a fresh executor per request
- * Montoya sendRequest cannot be interrupted so the timeout stops us waiting,
- * the request may still finish in the background
- *
- * custom headers (cookies, auth tokens, user agent) are set once at
- * construction and applied to every request, so authenticated content
- * discovery works, point it at a session cookie or Authorization header and
- * every path is requested as the logged in user
+ * custom headers (cookies, auth) are applied to every request, which is what
+ * makes authenticated content discovery work
  */
 public class HttpEngine {
 
@@ -27,7 +21,6 @@ public class HttpEngine {
     private final List<HeaderKV> headers;
     private volatile boolean cancelled = false;
 
-    // simple name/value pair, avoids depending on a Montoya HttpHeader type here
     public record HeaderKV(String name, String value) {}
 
     public HttpEngine(MontoyaApi api, int threads, int timeoutSeconds) {
@@ -45,14 +38,9 @@ public class HttpEngine {
     public boolean isCancelled(){ return cancelled; }
     public void shutdown()      { pool.shutdownNow(); }
 
-    // build a request with all custom headers applied
-    // withHeader replaces an existing header of the same name, so a custom
-    // Cookie or User-Agent overrides Burp's default rather than duplicating it
     private HttpRequest build(String url) {
         HttpRequest req = HttpRequest.httpRequestFromUrl(url);
-        for (HeaderKV h : headers) {
-            req = req.withHeader(h.name(), h.value());
-        }
+        for (HeaderKV h : headers) req = req.withHeader(h.name(), h.value());
         return req;
     }
 
@@ -61,10 +49,7 @@ public class HttpEngine {
     }
 
     public Future<HttpRequestResponse> submit(String url, String hostHeader) {
-        return pool.submit(() -> {
-            HttpRequest req = build(url).withHeader("Host", hostHeader);
-            return api.http().sendRequest(req);
-        });
+        return pool.submit(() -> api.http().sendRequest(build(url).withHeader("Host", hostHeader)));
     }
 
     public HttpRequestResponse await(Future<HttpRequestResponse> f) {

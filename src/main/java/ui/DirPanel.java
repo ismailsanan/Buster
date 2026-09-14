@@ -2,16 +2,13 @@ package ui;
 
 import burp.api.montoya.MontoyaApi;
 
+import core.WordlistSource;
 import modes.DirEnumerator;
 
 import javax.swing.*;
-import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * dir mode tab
- */
 public class DirPanel {
 
     private final MontoyaApi api;
@@ -20,7 +17,7 @@ public class DirPanel {
     private final JTextField target     = new JTextField("https://example.com");
     private final JTextField extensions = new JTextField("");
     private final JSpinner depth        = new JSpinner(new SpinnerNumberModel(1, 0, 6, 1));
-    private final JSpinner threads      = new JSpinner(new SpinnerNumberModel(10, 1, 50, 1));
+    private final JSpinner threads      = new JSpinner(new SpinnerNumberModel(30, 1, 50, 1));
     private final JCheckBox extOnRec    = new JCheckBox("Extensions on recursion", false);
     private final JCheckBox collapse    = new JCheckBox("Collapse duplicates", true);
 
@@ -37,13 +34,13 @@ public class DirPanel {
     public DirPanel(MontoyaApi api) {
         this.api = api;
         this.results = new ResultsTable(api);
-        this.panel = Layouts.modePanel(results, buildConfig());
+        this.panel = build();
     }
 
     public JComponent getComponent() { return panel; }
     public void cancel() { if (scan != null) scan.cancel(); }
 
-    private JComponent buildConfig() {
+    private JPanel build() {
         Layouts.Form form = new Layouts.Form();
         form.field("Target", target);
         form.field("Extensions (blank = dirs only)", extensions);
@@ -59,23 +56,21 @@ public class DirPanel {
         inputs.addTab("Wordlist", wordlist.getComponent());
         inputs.addTab("Headers / Auth", headers.getComponent());
 
-        return Layouts.config(form.build(), inputs);
+        return Layouts.modePanel(results.getComponent(), Layouts.config(form.build(), inputs));
     }
 
     private void start() {
         if (target.getText().isBlank()) { results.status("enter a target"); return; }
-
         List<String> exts = new ArrayList<>();
         exts.add("");
         for (String e : extensions.getText().split(",")) {
             String t = e.trim();
             if (!t.isEmpty()) exts.add(t.startsWith(".") ? t : "." + t);
         }
-
         running(true);
         new Thread(() -> {
             try {
-                List<String> words = wordlist.resolve();
+                WordlistSource words = wordlist.resolve();
                 scan = new DirEnumerator(api);
                 scan.scan(target.getText().trim(), words, exts,
                         (int) depth.getValue(), (int) threads.getValue(),
@@ -89,7 +84,6 @@ public class DirPanel {
         }).start();
     }
 
-    // Start becomes "Running..." and disables while a scan is active
     private void running(boolean on) {
         SwingUtilities.invokeLater(() -> {
             startBtn.setText(on ? "Running..." : "Start");

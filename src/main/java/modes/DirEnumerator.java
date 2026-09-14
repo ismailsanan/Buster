@@ -12,16 +12,12 @@ import java.util.function.Consumer;
 
 /**
  * recursive directory and file enumeration
- *
- * breadth first, one level at a time, a directory found at level N is
- * scanned at level N+1 until maxDepth
- *
- * every request's fate is logged to the Output tab so it's clear why
- * something did or didn't become a result, the baseline fails OPEN, if
- * calibration is uncertain it reports the hit rather than silently
- * dropping it
+ * streams the wordlist and processes requests in bounded batches, so memory
+ * stays flat regardless of wordlist size
  */
 public class DirEnumerator {
+
+    private static final int BATCH = 500;
 
     private final MontoyaApi api;
     private HttpEngine engine;
@@ -32,7 +28,7 @@ public class DirEnumerator {
 
     public void scan(
             String target,
-            List<String> wordlist,
+            WordlistSource wordlist,
             List<String> extensions,
             int maxDepth,
             int threads,
@@ -43,10 +39,8 @@ public class DirEnumerator {
             Consumer<String> onStatus) {
 
         engine = new HttpEngine(api, threads, 8, headers);
-
-        api.logging().logToOutput("[DIR] starting, " + wordlist.size()
-                + " words, " + extensions.size() + " ext(s), depth " + maxDepth
-                + ", " + threads + " threads");
+        api.logging().logToOutput("[DIR] starting, ~" + wordlist.estimatedSize()
+                + " words, depth " + maxDepth + ", " + threads + " threads");
 
         Set<String> seenFingerprints = ConcurrentHashMap.newKeySet();
         Set<String> visitedDirs = ConcurrentHashMap.newKeySet();
@@ -57,108 +51,99 @@ public class DirEnumerator {
         visitedDirs.add(root);
 
         onStatus.accept("calibrating and scanning " + root + " ...");
-
         int totalHits = 0;
 
         for (int depth = 0; depth <= maxDepth && !frontier.isEmpty() && !engine.isCancelled(); depth++) {
-
             List<String> level = new ArrayList<>(frontier);
             frontier.clear();
-
-            api.logging().logToOutput("[DIR] depth " + depth + " scanning " + level.size() + " dir(s)");
             boolean useExt = depth == 0 || extensionsOnRecursion;
 
             for (String dir : level) {
                 if (engine.isCancelled()) break;
-
-                onStatus.accept("scanning " + dir + " (" + wordlist.size() + " words) ...");
+                onStatus.accept("scanning " + dir + " ...");
                 Baseline baseline = calibrate(dir);
 
-                for (EnumResult hit : scanDir(dir, wordlist, extensions, baseline, useExt)) {
-                    if (collapseDuplicates && !seenFingerprints.add(hit.fingerprint())) continue;
-
-                    totalHits++;
-                    onHit.accept(hit);
-
-                    if ("dir".equals(hit.extra())) {
-                        String next = hit.name().endsWith("/") ? hit.name() : hit.name() + "/";
-                        if (visitedDirs.add(next)) frontier.add(next);
-                    }
-                }
+                totalHits += scanDir(dir, wordlist, extensions, baseline, useExt,
+                        seenFingerprints, collapseDuplicates,
+                        hit -> {
+                            onHit.accept(hit);
+                            if ("dir".equals(hit.extra())) {
+                                String next = hit.name().endsWith("/") ? hit.name() : hit.name() + "/";
+                                if (visitedDirs.add(next)) frontier.add(next);
+                            }
+                        });
             }
         }
 
         engine.shutdown();
-        onStatus.accept(engine.isCancelled() ? "stopped, " + totalHits + " found" : "done, " + totalHits + " found");
+        onStatus.accept(engine.isCancelled() ? "stopped, " + totalHits + " found"
+                                             : "done, " + totalHits + " found");
         api.logging().logToOutput("[DIR] finished, " + totalHits + " result(s)");
     }
 
-    // probe a random path, log what the server does with it
     private Baseline calibrate(String dirUrl) {
-        String probe = dirUrl + "zzz-does-not-exist-" + System.nanoTime();
-        HttpRequestResponse r = engine.sendOnce(probe);
-
-        if (r == null || !r.hasResponse()) {
-            api.logging().logToOutput("[DIR] baseline probe got no response for "
-                    + dirUrl + ", trusting status codes (404 = miss)");
-            return new Baseline(404, 0, false);
-        }
-
+        HttpRequestResponse r = engine.sendOnce(dirUrl + "zzz-none-" + System.nanoTime());
+        if (r == null || !r.hasResponse()) return new Baseline(404, 0, false);
         int status = r.response().statusCode();
         long length = r.response().body().length();
         boolean soft404 = status >= 200 && status < 400;
-
-        api.logging().logToOutput("[DIR] baseline for " + dirUrl
-                + " -> status=" + status + " length=" + length
-                + (soft404 ? " (soft 404, filtering by length)" : " (clean, 404 = miss)"));
-
+        api.logging().logToOutput("[DIR] baseline " + dirUrl + " status=" + status
+                + " len=" + length + (soft404 ? " (soft404)" : " (clean)"));
         return new Baseline(status, length, soft404);
     }
 
-    private List<EnumResult> scanDir(
-            String dirUrl, List<String> wordlist, List<String> extensions,
-            Baseline baseline, boolean useExt) {
+    private int scanDir(String dirUrl, WordlistSource wordlist, List<String> extensions,
+                        Baseline baseline, boolean useExt,
+                        Set<String> seen, boolean collapse, Consumer<EnumResult> onHit) {
 
         List<String> exts = useExt ? extensions : List.of("");
-        List<String> urls = new ArrayList<>();
-        List<Future<HttpRequestResponse>> futures = new ArrayList<>();
+        List<String> urls = new ArrayList<>(BATCH);
+        List<Future<HttpRequestResponse>> futures = new ArrayList<>(BATCH);
+        int hits = 0;
+        int[] stats = {0, 0};
 
-        for (String word : wordlist)
+        Iterator<String> it = wordlist.words().iterator();
+        while (it.hasNext() && !engine.isCancelled()) {
+            String word = it.next();
             for (String ext : exts) {
                 String url = dirUrl + word + ext;
                 urls.add(url);
                 futures.add(engine.submit(url));
             }
+            if (urls.size() >= BATCH || !it.hasNext()) {
+                hits += drain(urls, futures, baseline, seen, collapse, onHit, stats);
+                urls.clear();
+                futures.clear();
+            }
+        }
+        api.logging().logToOutput("[DIR] " + dirUrl + " -> " + hits + " hit(s), "
+                + stats[0] + " filtered, " + stats[1] + " no-response");
+        return hits;
+    }
 
-        List<EnumResult> hits = new ArrayList<>();
-        int noResponse = 0;
-        int filtered = 0;
-
+    private int drain(List<String> urls, List<Future<HttpRequestResponse>> futures,
+                      Baseline baseline, Set<String> seen, boolean collapse,
+                      Consumer<EnumResult> onHit, int[] stats) {
+        int hits = 0;
         for (int i = 0; i < futures.size(); i++) {
             if (engine.isCancelled()) break;
-
             HttpRequestResponse r = engine.await(futures.get(i));
-            if (r == null || !r.hasResponse()) { noResponse++; continue; }
+            if (r == null || !r.hasResponse()) { stats[1]++; continue; }
 
             String url = urls.get(i);
             int status = r.response().statusCode();
             long length = r.response().body().length();
+            if (!baseline.isInteresting(status, length)) { stats[0]++; continue; }
 
-            if (!baseline.isInteresting(status, length)) { filtered++; continue; }
+            String fp = status + ":" + length;
+            if (collapse && !seen.add(fp)) continue;
 
             String finalUrl = finalUrlOf(r, url);
             boolean isDir = isDirectory(url, finalUrl, status);
-            // show the redirect target whenever the response is a 3xx,
             String redirect = (status >= 300 && status < 400) ? finalUrl : "";
-            hits.add(EnumResult.http(url, redirect, status, length,
-                    isDir ? "dir" : "file", r));
+            onHit.accept(EnumResult.http(url, redirect, status, length, isDir ? "dir" : "file", r));
+            hits++;
         }
-
-        // one summary line per directory so it's obvious where results went
-        api.logging().logToOutput("[DIR] " + dirUrl + " -> " + hits.size()
-                + " hit(s), " + filtered + " filtered as baseline, "
-                + noResponse + " no response");
-
         return hits;
     }
 

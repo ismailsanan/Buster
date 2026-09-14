@@ -2,12 +2,11 @@ package ui;
 
 import burp.api.montoya.MontoyaApi;
 
+import core.WordlistSource;
 import modes.VhostEnumerator;
 
 import javax.swing.*;
-import java.util.List;
 
-/** vhost mode tab, results left, config right */
 public class VhostPanel {
 
     private final MontoyaApi api;
@@ -29,13 +28,13 @@ public class VhostPanel {
     public VhostPanel(MontoyaApi api) {
         this.api = api;
         this.results = new ResultsTable(api);
-        this.panel = Layouts.modePanel(results, buildConfig());
+        this.panel = build();
     }
 
     public JComponent getComponent() { return panel; }
     public void cancel() { if (scan != null) scan.cancel(); }
 
-    private JComponent buildConfig() {
+    private JPanel build() {
         Layouts.Form form = new Layouts.Form();
         form.field("Target (IP/host)", target);
         form.field("Base domain", domain);
@@ -48,7 +47,7 @@ public class VhostPanel {
         JTabbedPane inputs = new JTabbedPane();
         inputs.addTab("Wordlist", wordlist.getComponent());
 
-        return Layouts.config(form.build(), inputs);
+        return Layouts.modePanel(results.getComponent(), Layouts.config(form.build(), inputs));
     }
 
     private void start() {
@@ -56,7 +55,7 @@ public class VhostPanel {
         running(true);
         new Thread(() -> {
             try {
-                List<String> words = wordlist.resolve();
+                WordlistSource words = wordlist.resolve();
                 scan = new VhostEnumerator(api);
                 scan.scan(target.getText().trim(), domain.getText().trim(),
                         words, (int) threads.getValue(), results::addHit, results::status);
