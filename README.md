@@ -67,3 +67,9 @@ The jar lands at `target/Buster.jar`. Then in Burp: Extensions, Add, type Java, 
 
 DNS wildcard detection, so names that only resolve because everything does get discarded. Optional pushing of hits into Burp's site map for one click Repeater pivots. Response filtering by status, size, or regex.
 
+
+## Credits
+
+Inspired by [gobuster](https://github.com/OJ/gobuster) and [feroxbuster](https://github.com/epi052/feroxbuster). Buster reimplements their core ideas as a native Burp extension; all credit for the original tools goes to their authors.
+
+
