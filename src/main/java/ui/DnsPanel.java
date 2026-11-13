@@ -2,10 +2,10 @@ package ui;
 
 import burp.api.montoya.MontoyaApi;
 
-import core.WordlistSource;
 import modes.DnsEnumerator;
 
 import javax.swing.*;
+import java.awt.*;
 
 public class DnsPanel {
 
@@ -22,7 +22,7 @@ public class DnsPanel {
     private final JButton startBtn = new JButton("Start");
     private final JButton stopBtn  = new JButton("Stop");
 
-    private DnsEnumerator scan;
+    private final ScanRunner runner = new ScanRunner();
 
     public DnsPanel(MontoyaApi api) {
         this.api = api;
@@ -30,12 +30,17 @@ public class DnsPanel {
     }
 
     public JComponent getComponent() { return panel; }
-    public void cancel() { if (scan != null) scan.cancel(); }
+    public void cancel() { runner.cancel(); }
+    public void cancelAndWait(long millis) { runner.cancelAndWait(millis); }
 
     private JPanel build() {
+        JLabel note = new JLabel("<html>Uses the system DNS resolver,<br>not Burp's proxy / SOCKS settings.</html>");
+        note.setForeground(Color.GRAY);
+
         Layouts.Form form = new Layouts.Form();
         form.field("Base domain", domain);
         form.row("Threads", threads, " ", new JLabel());
+        form.add(note);
         form.buttons(startBtn, stopBtn);
 
         startBtn.addActionListener(e -> start());
@@ -47,21 +52,28 @@ public class DnsPanel {
         return Layouts.modePanel(results.getComponent(), Layouts.config(form.build(), inputs));
     }
 
+    /** runs on the EDT: every Swing value is read here, the worker only gets an immutable config */
     private void start() {
+        if (runner.isRunning()) return;
         if (domain.getText().isBlank()) { results.status("enter a domain"); return; }
+        DnsEnumerator.Config cfg;
+        try {
+            cfg = new DnsEnumerator.Config(domain.getText().trim(), wordlist.resolve(), (int) threads.getValue());
+        } catch (IllegalArgumentException ex) {
+            results.status(ex.getMessage());
+            return;
+        }
+
+        DnsEnumerator scan = new DnsEnumerator(api);
         running(true);
-        new Thread(() -> {
+        runner.start("Buster-dns-scan", scan::cancel, () -> {
             try {
-                WordlistSource words = wordlist.resolve();
-                scan = new DnsEnumerator(api);
-                scan.scan(domain.getText().trim(), words, (int) threads.getValue(),
-                        results::addHit, results::status);
+                scan.scan(cfg, results::addHit, results::status);
             } catch (Exception ex) {
                 results.status("error: " + ex.getMessage());
-            } finally {
-                running(false);
+                api.logging().logToError("[DNS] scan failed", ex);
             }
-        }).start();
+        }, () -> running(false));
     }
 
     private void running(boolean on) {

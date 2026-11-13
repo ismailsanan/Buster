@@ -3,13 +3,14 @@ package ui;
 import core.DnsResult;
 
 import javax.swing.*;
-import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 
-/** DNS specific results table: Subdomain / Type / Value / Note */
+/** DNS specific results table: Subdomain / Type / Value */
 public class DnsResultsTable {
+
+    private static final String[] COLUMNS = {"Subdomain", "Type", "Value"};
 
     private final JPanel panel;
     private final DefaultTableModel model;
@@ -18,19 +19,19 @@ public class DnsResultsTable {
     private int count = 0;
 
     public DnsResultsTable() {
-        model = new DefaultTableModel(new Object[]{"Subdomain", "Type", "Value", "Note"}, 0) {
+        model = new DefaultTableModel(COLUMNS, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
 
         JTable table = new JTable(model);
+        table.setDefaultRenderer(Object.class, new PlainCellRenderer());
         table.setFont(new Font("Monospaced", Font.PLAIN, 12));
         table.setRowHeight(20);
         table.setAutoCreateRowSorter(true);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
         table.getColumnModel().getColumn(0).setPreferredWidth(240);
         table.getColumnModel().getColumn(1).setPreferredWidth(60);
-        table.getColumnModel().getColumn(2).setPreferredWidth(220);
-        table.getColumnModel().getColumn(3).setPreferredWidth(200);
+        table.getColumnModel().getColumn(2).setPreferredWidth(260);
         table.getColumnModel().getColumn(1).setCellRenderer(new TypeRenderer());
 
         statusBanner.setFont(new Font("Monospaced", Font.PLAIN, 12));
@@ -60,7 +61,7 @@ public class DnsResultsTable {
 
     public void addHit(DnsResult r) {
         SwingUtilities.invokeLater(() -> {
-            model.addRow(new Object[]{ r.host(), r.type(), r.value(), r.note() });
+            model.addRow(new Object[]{ r.host(), r.type(), r.value() });
             counter.setText(++count + " found");
         });
     }
@@ -74,7 +75,7 @@ public class DnsResultsTable {
         });
     }
 
-    private static class TypeRenderer extends DefaultTableCellRenderer {
+    private static class TypeRenderer extends PlainCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable t, Object value,
                 boolean sel, boolean focus, int row, int col) {
@@ -93,7 +94,7 @@ public class DnsResultsTable {
         for (int r = 0; r < model.getRowCount(); r++) {
             for (int c = 0; c < model.getColumnCount(); c++) {
                 if (c > 0) sb.append("\t");
-                sb.append(model.getValueAt(r, c));
+                sb.append(CsvExporter.formulaSafe(String.valueOf(model.getValueAt(r, c))));
             }
             sb.append("\n");
         }
@@ -106,20 +107,9 @@ public class DnsResultsTable {
     }
 
     private void exportCsv() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setSelectedFile(new java.io.File("buster_dns.csv"));
-        if (chooser.showSaveDialog(panel) != JFileChooser.APPROVE_OPTION) return;
-        try (java.io.FileWriter w = new java.io.FileWriter(chooser.getSelectedFile())) {
-            w.write("Subdomain,Type,Value,Note\n");
-            for (int r = 0; r < model.getRowCount(); r++) {
-                w.write(csv(model.getValueAt(r,0)) + "," + model.getValueAt(r,1) + ","
-                        + csv(model.getValueAt(r,2)) + "," + csv(model.getValueAt(r,3)) + "\n");
-            }
-        } catch (Exception ignored) {}
-    }
-
-    private String csv(Object v) {
-        String s = String.valueOf(v);
-        return s.contains(",") || s.contains("\"") ? "\"" + s.replace("\"", "\"\"") + "\"" : s;
+        java.util.List<Object[]> rows = new java.util.ArrayList<>(model.getRowCount());
+        for (int r = 0; r < model.getRowCount(); r++)
+            rows.add(new Object[]{ model.getValueAt(r, 0), model.getValueAt(r, 1), model.getValueAt(r, 2) });
+        CsvExporter.export(panel, "buster_dns.csv", COLUMNS, rows);
     }
 }

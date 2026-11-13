@@ -2,7 +2,7 @@ package ui;
 
 import burp.api.montoya.MontoyaApi;
 
-import core.WordlistSource;
+import core.UrlUtil;
 import modes.DirEnumerator;
 
 import javax.swing.*;
@@ -29,7 +29,7 @@ public class DirPanel {
     private final JButton startBtn = new JButton("Start");
     private final JButton stopBtn  = new JButton("Stop");
 
-    private DirEnumerator scan;
+    private final ScanRunner runner = new ScanRunner();
 
     public DirPanel(MontoyaApi api) {
         this.api = api;
@@ -38,7 +38,8 @@ public class DirPanel {
     }
 
     public JComponent getComponent() { return panel; }
-    public void cancel() { if (scan != null) scan.cancel(); }
+    public void cancel() { runner.cancel(); }
+    public void cancelAndWait(long millis) { runner.cancelAndWait(millis); }
 
     private JPanel build() {
         Layouts.Form form = new Layouts.Form();
@@ -59,29 +60,45 @@ public class DirPanel {
         return Layouts.modePanel(results.getComponent(), Layouts.config(form.build(), inputs));
     }
 
+    /** runs on the EDT: every Swing value is read here, the worker only gets an immutable config */
     private void start() {
-        if (target.getText().isBlank()) { results.status("enter a target"); return; }
+        if (runner.isRunning()) return;
+        DirEnumerator.Config cfg;
+        try {
+            cfg = new DirEnumerator.Config(
+                    UrlUtil.normalizeTarget(target.getText(), true),
+                    wordlist.resolve(),
+                    parseExtensions(extensions.getText()),
+                    (int) depth.getValue(),
+                    (int) threads.getValue(),
+                    extOnRec.isSelected(),
+                    collapse.isSelected(),
+                    headers.resolve());
+        } catch (IllegalArgumentException ex) {
+            results.status(ex.getMessage());
+            return;
+        }
+
+        DirEnumerator scan = new DirEnumerator(api);
+        running(true);
+        runner.start("Buster-dir-scan", scan::cancel, () -> {
+            try {
+                scan.scan(cfg, results::addHit, results::status);
+            } catch (Exception ex) {
+                results.status("error: " + ex.getMessage());
+                api.logging().logToError("[DIR] scan failed", ex);
+            }
+        }, () -> running(false));
+    }
+
+    static List<String> parseExtensions(String raw) {
         List<String> exts = new ArrayList<>();
         exts.add("");
-        for (String e : extensions.getText().split(",")) {
+        for (String e : raw.split(",")) {
             String t = e.trim();
             if (!t.isEmpty()) exts.add(t.startsWith(".") ? t : "." + t);
         }
-        running(true);
-        new Thread(() -> {
-            try {
-                WordlistSource words = wordlist.resolve();
-                scan = new DirEnumerator(api);
-                scan.scan(target.getText().trim(), words, exts,
-                        (int) depth.getValue(), (int) threads.getValue(),
-                        extOnRec.isSelected(), collapse.isSelected(),
-                        headers.resolve(), results::addHit, results::status);
-            } catch (Exception ex) {
-                results.status("error: " + ex.getMessage());
-            } finally {
-                running(false);
-            }
-        }).start();
+        return exts;
     }
 
     private void running(boolean on) {

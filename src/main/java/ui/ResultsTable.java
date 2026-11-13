@@ -8,7 +8,6 @@ import burp.api.montoya.ui.editor.HttpResponseEditor;
 import core.EnumResult;
 
 import javax.swing.*;
-import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
@@ -18,9 +17,14 @@ import java.util.List;
 import static burp.api.montoya.ui.editor.EditorOptions.READ_ONLY;
 
 /**
- * results table for HTTP modes, columns Result / Status / Size / Redirect
+ * results table for HTTP modes, columns Result / Status / Size / Type / Redirect
+ *
+ * request/response pairs arrive already moved to Burp temp files (HttpEngine),
+ * so a long scan does not pin every response body in memory
  */
 public class ResultsTable {
+
+    private static final String[] COLUMNS = {"Result", "Status", "Size", "Type", "Redirect"};
 
     private final JPanel panel;
     private final DefaultTableModel model;
@@ -33,11 +37,12 @@ public class ResultsTable {
     private final HttpResponseEditor responseViewer;
 
     public ResultsTable(MontoyaApi api) {
-        model = new DefaultTableModel(new Object[]{"Result", "Status", "Size", "Redirect"}, 0) {
+        model = new DefaultTableModel(COLUMNS, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
 
         JTable table = new JTable(model);
+        table.setDefaultRenderer(Object.class, new PlainCellRenderer());
         table.setFont(new Font("Monospaced", Font.PLAIN, 12));
         table.setRowHeight(20);
         table.setAutoCreateRowSorter(true);
@@ -46,7 +51,8 @@ public class ResultsTable {
         table.getColumnModel().getColumn(0).setPreferredWidth(360);
         table.getColumnModel().getColumn(1).setPreferredWidth(60);
         table.getColumnModel().getColumn(2).setPreferredWidth(70);
-        table.getColumnModel().getColumn(3).setPreferredWidth(260);
+        table.getColumnModel().getColumn(3).setPreferredWidth(60);
+        table.getColumnModel().getColumn(4).setPreferredWidth(260);
         table.getColumnModel().getColumn(1).setCellRenderer(new StatusRenderer());
 
         requestViewer  = api.userInterface().createHttpRequestEditor(READ_ONLY);
@@ -94,6 +100,7 @@ public class ResultsTable {
         SwingUtilities.invokeLater(() -> statusBanner.setText(text));
     }
 
+    /** called from scan threads */
     public void addHit(EnumResult hit) {
         SwingUtilities.invokeLater(() -> {
             exchanges.add(hit.exchange());
@@ -101,6 +108,7 @@ public class ResultsTable {
                     hit.name(),
                     hit.status() == 0 ? "" : hit.status(),
                     hit.length() == 0 ? "" : hit.length(),
+                    hit.extra(),
                     hit.redirect()
             });
             counter.setText(++count + " found");
@@ -127,7 +135,7 @@ public class ResultsTable {
         if (rr.response() != null) responseViewer.setResponse(rr.response());
     }
 
-    private static class StatusRenderer extends DefaultTableCellRenderer {
+    private static class StatusRenderer extends PlainCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable t, Object value,
                 boolean sel, boolean focus, int row, int col) {
@@ -153,7 +161,7 @@ public class ResultsTable {
         for (int r = 0; r < model.getRowCount(); r++) {
             for (int c = 0; c < model.getColumnCount(); c++) {
                 if (c > 0) sb.append("\t");
-                sb.append(model.getValueAt(r, c));
+                sb.append(CsvExporter.formulaSafe(String.valueOf(model.getValueAt(r, c))));
             }
             sb.append("\n");
         }
@@ -166,20 +174,12 @@ public class ResultsTable {
     }
 
     private void exportCsv() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setSelectedFile(new java.io.File("buster_results.csv"));
-        if (chooser.showSaveDialog(panel) != JFileChooser.APPROVE_OPTION) return;
-        try (java.io.FileWriter w = new java.io.FileWriter(chooser.getSelectedFile())) {
-            w.write("Result,Status,Size,Redirect\n");
-            for (int r = 0; r < model.getRowCount(); r++) {
-                w.write(csv(model.getValueAt(r,0)) + "," + model.getValueAt(r,1) + ","
-                        + model.getValueAt(r,2) + "," + csv(model.getValueAt(r,3)) + "\n");
-            }
-        } catch (Exception ignored) {}
-    }
-
-    private String csv(Object v) {
-        String s = String.valueOf(v);
-        return s.contains(",") || s.contains("\"") ? "\"" + s.replace("\"", "\"\"") + "\"" : s;
+        List<Object[]> rows = new ArrayList<>(model.getRowCount());
+        for (int r = 0; r < model.getRowCount(); r++) {
+            Object[] row = new Object[COLUMNS.length];
+            for (int c = 0; c < COLUMNS.length; c++) row[c] = model.getValueAt(r, c);
+            rows.add(row);
+        }
+        CsvExporter.export(panel, "buster_results.csv", COLUMNS, rows);
     }
 }

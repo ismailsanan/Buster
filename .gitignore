@@ -1,16 +1,8 @@
-# Compiled class file
+# Build output
+target/
+out/
+bin/
 *.class
-
-# Log file
-*.log
-
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
 *.jar
 *.war
 *.nar
@@ -18,36 +10,41 @@
 *.zip
 *.tar.gz
 *.rar
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+*.log
 hs_err_pid*
 replay_pid*
-# Maven build output
-target/
 
-# IntelliJ
+# IDEs
 .idea/
 *.iml
 *.iws
 *.ipr
-out/
-
-# Eclipse (in case you or a contributor uses it)
 .classpath
 .project
 .settings/
-bin/
-
-# VS Code
 .vscode/
-
-# Compiled class files
-*.class
-
-# Build artifacts / logs
-*.jar
-*.log
+.mtj.tmp/
+*.ctxt
 
 # OS junk
 .DS_Store
 Thumbs.db
+
+# AI agents / assistant tooling
+graphify-out/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+.gemini/
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.aider*
+.continue/
+.codeium/
+.copilot/
+.github/copilot-instructions.md
+.mcp.json

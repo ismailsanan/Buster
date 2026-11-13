@@ -2,7 +2,7 @@ package ui;
 
 import burp.api.montoya.MontoyaApi;
 
-import core.WordlistSource;
+import core.UrlUtil;
 import modes.VhostEnumerator;
 
 import javax.swing.*;
@@ -18,12 +18,13 @@ public class VhostPanel {
 
     private final WordlistPicker wordlist =
             new WordlistPicker("Paste subdomain words one per line, or Load File");
+    private final HeadersPanel headers = new HeadersPanel();
     private final ResultsTable results;
 
     private final JButton startBtn = new JButton("Start");
     private final JButton stopBtn  = new JButton("Stop");
 
-    private VhostEnumerator scan;
+    private final ScanRunner runner = new ScanRunner();
 
     public VhostPanel(MontoyaApi api) {
         this.api = api;
@@ -32,7 +33,8 @@ public class VhostPanel {
     }
 
     public JComponent getComponent() { return panel; }
-    public void cancel() { if (scan != null) scan.cancel(); }
+    public void cancel() { runner.cancel(); }
+    public void cancelAndWait(long millis) { runner.cancelAndWait(millis); }
 
     private JPanel build() {
         Layouts.Form form = new Layouts.Form();
@@ -46,25 +48,37 @@ public class VhostPanel {
 
         JTabbedPane inputs = new JTabbedPane();
         inputs.addTab("Wordlist", wordlist.getComponent());
+        inputs.addTab("Headers / Auth", headers.getComponent());
 
         return Layouts.modePanel(results.getComponent(), Layouts.config(form.build(), inputs));
     }
 
+    /** runs on the EDT: every Swing value is read here, the worker only gets an immutable config */
     private void start() {
-        if (target.getText().isBlank()) { results.status("enter a target"); return; }
+        if (runner.isRunning()) return;
+        VhostEnumerator.Config cfg;
+        try {
+            cfg = new VhostEnumerator.Config(
+                    UrlUtil.normalizeTarget(target.getText(), false),
+                    domain.getText().trim(),
+                    wordlist.resolve(),
+                    (int) threads.getValue(),
+                    headers.resolve());
+        } catch (IllegalArgumentException ex) {
+            results.status(ex.getMessage());
+            return;
+        }
+
+        VhostEnumerator scan = new VhostEnumerator(api);
         running(true);
-        new Thread(() -> {
+        runner.start("Buster-vhost-scan", scan::cancel, () -> {
             try {
-                WordlistSource words = wordlist.resolve();
-                scan = new VhostEnumerator(api);
-                scan.scan(target.getText().trim(), domain.getText().trim(),
-                        words, (int) threads.getValue(), results::addHit, results::status);
+                scan.scan(cfg, results::addHit, results::status);
             } catch (Exception ex) {
                 results.status("error: " + ex.getMessage());
-            } finally {
-                running(false);
+                api.logging().logToError("[VHOST] scan failed", ex);
             }
-        }).start();
+        }, () -> running(false));
     }
 
     private void running(boolean on) {

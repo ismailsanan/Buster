@@ -2,7 +2,9 @@ package core;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
@@ -14,14 +16,18 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 /**
- * a source of words that can be iterated WITHOUT loading everything into
- * memory, this is what makes huge wordlists
+ * a source of words that can be iterated WITHOUT loading everything into memory
  *
- *   ofList  small pasted lists, already in memory
+ *   ofList  small lists, already in memory
+ *   ofText  pasted text, parsed lazily on first use so it happens on the scan
+ *           thread rather than the Swing EDT
  *   ofFile  a file streamed line by line, re-opened each iteration so the
- *   recursion in dir mode can iterate it again without holding a previous pass in memory
+ *           recursion in dir mode can iterate it again without holding a previous pass in memory
  */
 public interface WordlistSource {
+
+    /** lines longer than this are skipped, guards against a binary or newline-less file */
+    int MAX_LINE = 2048;
 
     Iterable<String> words();
     long estimatedSize();
@@ -32,6 +38,19 @@ public interface WordlistSource {
             public Iterable<String> words() { return words; }
             public long estimatedSize() { return words.size(); }
             public String describe() { return words.size() + " words"; }
+        };
+    }
+
+    static WordlistSource ofText(String raw) {
+        return new WordlistSource() {
+            private List<String> parsed;
+            private synchronized List<String> list() {
+                if (parsed == null) parsed = Wordlists.parse(raw);
+                return parsed;
+            }
+            public Iterable<String> words() { return list(); }
+            public long estimatedSize() { return list().size(); }
+            public String describe() { return list().size() + " words"; }
         };
     }
 
@@ -51,11 +70,9 @@ public interface WordlistSource {
                     private String advance() {
                         try {
                             String line;
-                            while ((line = reader.readLine()) != null) {
-                                String t = line.trim();
-                                if (t.isEmpty() || t.startsWith("#")) continue;
-                                if (t.startsWith("/")) t = t.substring(1);
-                                return t;
+                            while ((line = readBoundedLine(reader)) != null) {
+                                String w = Wordlists.clean(line);
+                                if (w != null) return w;
                             }
                             reader.close();
                             return null;
@@ -82,13 +99,44 @@ public interface WordlistSource {
         }
     }
 
+    /**
+     * like readLine but never buffers more than MAX_LINE chars, an over-long
+     * line is consumed and returned as "" (which the cleaner then skips)
+     */
+    static String readBoundedLine(Reader r) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        boolean overflow = false;
+        int c;
+        while ((c = r.read()) != -1) {
+            if (c == '\n') break;
+            if (c == '\r') {
+                r.mark(1);
+                if (r.read() != '\n') r.reset();
+                break;
+            }
+            if (sb.length() < MAX_LINE) sb.append((char) c);
+            else overflow = true;
+        }
+        if (c == -1 && sb.length() == 0 && !overflow) return null;
+        return overflow ? "" : sb.toString();
+    }
+
+    /** counts newlines in fixed size chunks, -1 when the file cannot be read */
     static long countLines(Path path) {
         long count = 0;
-        try (BufferedReader r = open(path)) {
-            while (r.readLine() != null) count++;
+        boolean pending = false;
+        byte[] buf = new byte[64 * 1024];
+        try (InputStream in = Files.newInputStream(path)) {
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                for (int i = 0; i < n; i++) {
+                    if (buf[i] == '\n') { count++; pending = false; }
+                    else pending = true;
+                }
+            }
         } catch (IOException e) {
             return -1;
         }
-        return count;
+        return pending ? count + 1 : count;
     }
 }

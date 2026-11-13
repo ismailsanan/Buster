@@ -7,7 +7,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.io.File;
 import java.nio.file.Path;
-import java.util.List;
 
 /**
  * wordlist input paste small lists or Load File for big ones
@@ -21,12 +20,16 @@ public class WordlistPicker {
     private final JLabel count = new JLabel("0 words");
     private final JButton load;
 
+    // recount only after typing/pasting pauses, so a huge paste is parsed once, not per event
+    private final Timer recount = new Timer(300, e -> recount());
+
     private Path loadedFile = null;
     private long loadedLines = 0;
 
     public WordlistPicker(String placeholder) {
         area.setFont(new Font("Monospaced", Font.PLAIN, 12));
         area.setToolTipText(placeholder);
+        recount.setRepeats(false);
 
         area.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             public void insertUpdate(javax.swing.event.DocumentEvent e)  { onEdit(); }
@@ -37,7 +40,12 @@ public class WordlistPicker {
         load          = new JButton("Load File");
         JButton clear = new JButton("Clear");
         load.addActionListener(e -> loadFile((Component) e.getSource()));
-        clear.addActionListener(e -> { loadedFile = null; area.setText(""); });
+        clear.addActionListener(e -> {
+            loadedFile = null;
+            loadedLines = 0;
+            area.setText("");
+            count.setText("0 words");
+        });
 
         JLabel hint = new JLabel("(paste with Ctrl+V)");
         hint.setForeground(Color.GRAY);
@@ -57,11 +65,12 @@ public class WordlistPicker {
     public JComponent getComponent() { return panel; }
 
     public WordlistSource resolve() {
+        if (recount.isRunning()) { recount.stop(); recount(); }   // flush a pending edit
         if (loadedFile != null) return WordlistSource.ofFile(loadedFile, loadedLines);
-        List<String> words = Wordlists.parse(area.getText());
-        if (words.isEmpty())
+        String text = area.getText();
+        if (!Wordlists.hasAnyWord(text))
             throw new IllegalArgumentException("wordlist is empty, paste words or load a file");
-        return WordlistSource.ofList(words);
+        return WordlistSource.ofText(text);   // parsed on the scan thread
     }
 
     private void loadFile(Component parent) {
@@ -101,7 +110,9 @@ public class WordlistPicker {
         }.execute();
     }
 
-    private void onEdit() {
+    private void onEdit() { recount.restart(); }
+
+    private void recount() {
         String text = area.getText();
         boolean justNote = text.lines().allMatch(l -> l.isBlank() || l.startsWith("#"));
         if (!justNote) {
