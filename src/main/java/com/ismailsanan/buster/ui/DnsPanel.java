@@ -11,11 +11,18 @@ import java.util.List;
 
 public class DnsPanel {
 
+    private static final String SYSTEM_LABEL = "System DNS resolver";
+    private static final String BURP_LABEL   = "Burp (HTTP probe)";
+    private static final String SYSTEM_HINT  = "Lists A/AAAA records. Bypasses Burp's proxy settings.";
+    private static final String BURP_HINT    = "Uses Burp's proxy / SOCKS settings. Finds hosts that answer HTTP(S).";
+
     private final MontoyaApi api;
     private final JPanel panel;
 
     private final JTextField domain = new JTextField("target.com");
     private final JSpinner threads  = new JSpinner(new SpinnerNumberModel(30, 1, 100, 1));
+    private final JComboBox<String> resolveVia = new JComboBox<>(new String[]{ SYSTEM_LABEL, BURP_LABEL });
+    private final JLabel resolveHint = new JLabel();
 
     private final WordlistPicker wordlist =
             new WordlistPicker("Paste subdomain words one per line, or Load File");
@@ -46,13 +53,19 @@ public class DnsPanel {
     public void prefill(String domain) { this.domain.setText(domain); }
 
     private JPanel build() {
-        JLabel note = new JLabel("<html>Uses the system DNS resolver,<br>not Burp's proxy / SOCKS settings.</html>");
-        note.setForeground(Color.GRAY);
+        resolveVia.setToolTipText("System DNS: real DNS records, sent from this machine. "
+                + "Burp: each name is requested over HTTP(S) through Burp, so an upstream proxy or SOCKS "
+                + "for a specific network is used; reports names that answer, not IPs.");
+        resolveHint.putClientProperty("html.disable", Boolean.TRUE);
+        resolveHint.setForeground(Color.GRAY);
+        resolveVia.addActionListener(e -> updateHint());
+        updateHint();
 
         Layouts.Form form = new Layouts.Form();
         form.field("Base domain", domain);
         form.row("Threads", threads, " ", new JLabel());
-        form.add(note);
+        form.field("Resolve via", resolveVia);
+        form.add(resolveHint);
         form.buttons(startBtn, stopBtn);
 
         startBtn.addActionListener(e -> start());
@@ -70,7 +83,9 @@ public class DnsPanel {
         if (domain.getText().isBlank()) { results.status("enter a domain"); return; }
         DnsEnumerator.Config cfg;
         try {
-            cfg = new DnsEnumerator.Config(domain.getText().trim(), wordlist.resolve(), (int) threads.getValue());
+            cfg = new DnsEnumerator.Config(domain.getText().trim(), wordlist.resolve(), (int) threads.getValue(),
+                    BURP_LABEL.equals(resolveVia.getSelectedItem())
+                            ? DnsEnumerator.Resolver.BURP : DnsEnumerator.Resolver.SYSTEM);
         } catch (IllegalArgumentException ex) {
             results.status(ex.getMessage());
             return;
@@ -79,6 +94,10 @@ public class DnsPanel {
         DnsEnumerator scan = new DnsEnumerator(api);
         running(true);
         runner.start("Buster-dns-scan", scan::cancel, () -> scan.scan(cfg, results::addHit, results::status), () -> running(false));
+    }
+
+    private void updateHint() {
+        resolveHint.setText(BURP_LABEL.equals(resolveVia.getSelectedItem()) ? BURP_HINT : SYSTEM_HINT);
     }
 
     private void running(boolean on) {

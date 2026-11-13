@@ -18,7 +18,7 @@ Works in **Burp Suite Community and Professional**. Inspired by [gobuster](https
 |---|---|
 | **Dir** | Recursive path brute forcing with extensions and adjustable depth. Calibrates every directory first, so soft 404s, catch-all routes and blanket 401/403 pages don't flood the results. |
 | **Vhost** | Varies the `Host` header against one IP to find virtual hosts. A junk-host baseline filters out wildcard responses. |
-| **DNS** | Actively brute forces subdomains and lists their A/AAAA records. Wildcard DNS is detected and filtered out. |
+| **DNS** | Actively brute forces subdomains, using either the system DNS resolver (lists A/AAAA records, filters wildcard DNS) or Burp's network stack (finds hosts that answer over HTTP(S) through your upstream proxy). |
 
 Every mode also gives you:
 
@@ -51,9 +51,10 @@ Hits stream in. Directories (a `301` to `/name/`, or a confirmed `/name/`) are s
 Each word is sent as `word.target.com` in the `Host` header to the same address. Only responses that differ from the junk-host baseline are reported.
 
 ### DNS
-1. Enter the base domain and a subdomain wordlist, then press **Start**.
-
-Names that resolve are listed with their IPs. Names that only resolve because of a wildcard record are filtered out.
+1. Enter the base domain and a subdomain wordlist.
+2. Choose **Resolve via**, then press **Start**:
+   - **System DNS resolver**: real DNS lookups from your machine. Lists each name's A/AAAA records and filters out names that only resolve because of a wildcard record.
+   - **Burp (HTTP probe)**: each name is requested as `https://name/` (then `http://name/`) through Burp, so your upstream proxy or SOCKS settings decide how it's resolved. Use this when the target is only reachable through a proxy for a specific network. It lists names that answer, with status and size, not IPs. If unknown names also get an answer (for example a proxy's error page), matching answers are filtered out.
 
 ### From anywhere in Burp
 Right-click a request in Proxy, Target, Repeater or Logger and choose **Send to Buster**. This pre-fills Dir (from that directory), Vhost (that host) or DNS (its domain). Nothing is sent until you press Start.
@@ -63,6 +64,7 @@ Right-click a request in Proxy, Target, Repeater or Logger and choose **Send to 
 | Option | Where | Default | Notes |
 |---|---|---|---|
 | Threads | all modes | 30 / 10 / 30 | Concurrent requests or lookups. |
+| Resolve via | DNS | System DNS resolver | `System DNS resolver` or `Burp (HTTP probe)`, see [DNS](#dns). |
 | Extensions | Dir | empty | File suffixes tried for every word: with `php, bak`, the word `admin` sends `admin`, `admin.php` and `admin.bak`. Empty = only the bare words. |
 | Depth | Dir | 1 | How many directory levels to recurse. `0` = scan only the target directory, `1` = also scan inside each directory found there, and so on. |
 | Req/s | Dir, Vhost | 0 (no limit) | A hard cap on requests per second across all threads. |
@@ -75,7 +77,7 @@ When a target answers `429` (or `503` with `Retry-After`), Buster retries with g
 
 ## Good to know
 
-- **DNS mode uses your operating system's resolver**, not Burp's network stack, so upstream proxy and SOCKS settings don't apply to it.
+- **DNS with the system resolver** doesn't go through Burp, so upstream proxy and SOCKS settings don't apply. Switch **Resolve via** to **Burp** when they should.
 - **Vhost over HTTPS** sends the TLS SNI of the target, not the vhost name, so servers that route purely on SNI won't reveal their vhosts this way.
 - **Stop and unload are clean**: in-flight scans are cancelled and every thread exits.
 

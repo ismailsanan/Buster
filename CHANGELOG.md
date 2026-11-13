@@ -10,6 +10,7 @@ First release for BApp Store submission.
 - Dir: duplicate collapsing per directory only; directories are never hidden.
 - Vhost: custom headers and multi-probe calibration.
 - DNS: streamed lookups with bounded concurrency; wildcard IPs detected and filtered.
+- DNS: choose the system resolver or Burp's network stack (HTTP probe through upstream proxy / SOCKS).
 - Optional requests-per-second limit; automatic backoff on 429 (and 503 with Retry-After).
 
 **Results**

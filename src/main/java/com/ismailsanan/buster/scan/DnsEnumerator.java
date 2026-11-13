@@ -2,7 +2,9 @@ package com.ismailsanan.buster.scan;
 
 import burp.api.montoya.MontoyaApi;
 
+import com.ismailsanan.buster.core.Baseline;
 import com.ismailsanan.buster.core.DnsResolver;
+import com.ismailsanan.buster.core.HttpEngine;
 import com.ismailsanan.buster.core.DnsResult;
 import com.ismailsanan.buster.core.Threads;
 import com.ismailsanan.buster.core.WordlistSource;
@@ -27,10 +29,26 @@ public class DnsEnumerator {
     private static final int WILDCARD_PROBES = 3;
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    public record Config(String domain, WordlistSource wordlist, int threads) {}
+    private static final int BURP_TIMEOUT_SECONDS = 6;
+
+    /** how names are looked up */
+    public enum Resolver {
+        /** the operating system resolver: lists A/AAAA records, bypasses Burp's network settings */
+        SYSTEM,
+        /** an HTTP(S) request through Burp: honours its upstream proxy / SOCKS settings, finds live hosts */
+        BURP
+    }
+
+    public record Config(String domain, WordlistSource wordlist, int threads, Resolver resolver) {
+        /** system resolver */
+        public Config(String domain, WordlistSource wordlist, int threads) {
+            this(domain, wordlist, threads, Resolver.SYSTEM);
+        }
+    }
 
     private final MontoyaApi api;
     private volatile ExecutorService pool;
+    private volatile HttpEngine engine;
     private volatile boolean cancelled = false;
 
     public DnsEnumerator(MontoyaApi api) { this.api = api; }
@@ -40,12 +58,18 @@ public class DnsEnumerator {
         cancelled = true;
         ExecutorService p = pool;
         if (p != null) p.shutdownNow();
+        HttpEngine e = engine;
+        if (e != null) e.cancel();
     }
 
     private boolean stopped() { return cancelled || Thread.currentThread().isInterrupted(); }
 
     public void scan(Config cfg, Consumer<DnsResult> onHit, Consumer<String> onStatus) {
         String domain = normalizeDomain(cfg.domain());
+        if (cfg.resolver() == Resolver.BURP) {
+            scanViaBurp(cfg, domain, onHit, onStatus);
+            return;
+        }
         DnsResolver resolver = new DnsResolver(m -> api.logging().logToError(m));
 
         ExecutorService p = Threads.fixedPool("Buster-dns", cfg.threads());
@@ -105,6 +129,30 @@ public class DnsEnumerator {
         } finally {
             WordlistSource.close(it);
             p.shutdownNow();
+        }
+    }
+
+    private void scanViaBurp(Config cfg, String domain, Consumer<DnsResult> onHit, Consumer<String> onStatus) {
+        HttpEngine eng = new HttpEngine(api, "dns", cfg.threads(), BURP_TIMEOUT_SECONDS, List.of());
+        engine = eng;
+        if (cancelled) eng.cancel();
+
+        Iterator<String> it = cfg.wordlist().words().iterator();
+        try {
+            BurpHostProber prober = new BurpHostProber(eng, this::stopped);
+            onStatus.accept("checking how Burp answers unknown names under " + domain + " ...");
+            Optional<Baseline> baseline = prober.baseline(domain);
+            baseline.ifPresent(b -> api.logging().logToOutput("[DNS/Burp] random names answer with "
+                    + b.describe() + ", matching answers are filtered"));
+            onStatus.accept("probing names under " + domain + " through Burp ...");
+
+            BurpHostProber.Outcome o = prober.scan(domain, it, baseline, onHit);
+            String tail = o.filtered() > 0 ? ", " + o.filtered() + " filtered" : "";
+            onStatus.accept((stopped() ? "stopped, " : "done, ") + o.found() + " found" + tail);
+            api.logging().logToOutput("[DNS/Burp] finished, " + o.found() + " found" + tail);
+        } finally {
+            WordlistSource.close(it);
+            eng.shutdown();
         }
     }
 

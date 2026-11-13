@@ -62,7 +62,7 @@ public class BaselineDetector {
      * most common status, ignoring transient ones (429, 5xx) when anything else
      * answered, so one rate-limited probe cannot become the "not found" baseline
      */
-    static int dominantStatus(List<Integer> statuses) {
+    public static int dominantStatus(List<Integer> statuses) {
         java.util.Map<Integer, Integer> counts = new java.util.LinkedHashMap<>();
         for (int s : statuses) counts.merge(s, 1, Integer::sum);
         boolean anyStable = counts.keySet().stream().anyMatch(s -> !isTransient(s));

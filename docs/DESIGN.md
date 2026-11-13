@@ -13,6 +13,7 @@ Burp Suite extension (Montoya API, Java 17) for content discovery: directories, 
 | F5 | Optionally collapse duplicate responses (same status and size) within a directory. |
 | F6 | **Vhost mode**: vary the `Host` header against one target and report hosts whose response differs from a junk-host baseline. |
 | F7 | **DNS mode**: resolve `word.domain` candidates and report A/AAAA records; detect wildcard DNS and filter its IPs. |
+| F7a | DNS "Resolve via Burp": probe candidates over HTTP(S) through Burp's network stack (upstream proxy / SOCKS) and report names that answer; answers matching random-name probes are filtered. |
 | F8 | Apply user-defined headers (cookies, auth tokens) to every Dir/Vhost request. |
 | F9 | Accept pasted wordlists or stream large wordlist files from disk. |
 | F10 | Show results live in a sortable table, with request/response viewers for HTTP hits. |
@@ -35,7 +36,7 @@ Burp Suite extension (Montoya API, Java 17) for content discovery: directories, 
 | Politeness | 429 (and 503 with Retry-After) triggers retries with shared exponential backoff (250ms to 5s) that decays on success; rate-limit responses are never reported as hits. |
 | Lifecycle | Scans stop cleanly on Stop and on extension unload (cancel, interrupt, bounded join); all threads are named daemons. |
 | Security | Server data is treated as untrusted; CSV export is escaped against formula injection; no data leaves Burp other than the scan traffic itself. |
-| Integration | HTTP goes through Burp's networking (`api.http()`), so it respects project proxy/TLS settings. DNS uses the OS resolver (documented limitation). |
+| Integration | HTTP goes through Burp's networking (`api.http()`), so it respects project proxy/TLS settings. DNS uses the OS resolver by default; "Resolve via Burp" routes it through Burp instead. |
 | Compatibility | Burp Community and Professional; Java 17+; Montoya API 2026.2. |
 | Maintainability | Pure logic (`Baseline`, `UrlUtil`, CSV escaping, parsing) is free of Burp types and covered by JUnit 5 tests (`mvn verify`). |
 
@@ -53,6 +54,7 @@ Buster (entry point, registers tab, context menu and unload handler)
              BusterContextMenu                → "Send to Buster" from other Burp tools
              WordlistPicker, HeadersPanel, Layouts
  └─ scan/    DirEnumerator, VhostEnumerator, DnsEnumerator  → scan logic per mode
+             BurpHostProber                                  → DNS mode's "via Burp" probing
  └─ core/    HttpEngine (thread pool + Burp HTTP), BaselineDetector/Baseline (calibration),
              Throttle (rate limit + backoff), ResultFilter, DnsResolver,
              WordlistSource (streaming), UrlUtil, Threads
