@@ -26,7 +26,15 @@ public class DirEnumerator {
             int threads,
             boolean extensionsOnRecursion,
             boolean collapseDuplicates,
-            List<HttpEngine.HeaderKV> headers) {}
+            List<HttpEngine.HeaderKV> headers,
+            int requestsPerSecond) {
+
+        /** no rate limit */
+        public Config(String target, WordlistSource wordlist, List<String> extensions, int maxDepth, int threads,
+                      boolean extensionsOnRecursion, boolean collapseDuplicates, List<HttpEngine.HeaderKV> headers) {
+            this(target, wordlist, extensions, maxDepth, threads, extensionsOnRecursion, collapseDuplicates, headers, 0);
+        }
+    }
 
     private final MontoyaApi api;
     private volatile HttpEngine engine;
@@ -45,7 +53,8 @@ public class DirEnumerator {
 
     public void scan(Config cfg, Consumer<EnumResult> onHit, Consumer<String> onStatus) {
         String root = UrlUtil.normalizeTarget(cfg.target(), true);
-        HttpEngine eng = new HttpEngine(api, "dir", cfg.threads(), TIMEOUT_SECONDS, cfg.headers());
+        HttpEngine eng = new HttpEngine(api, "dir", cfg.threads(), TIMEOUT_SECONDS, cfg.headers(),
+                cfg.requestsPerSecond());
         engine = eng;
         if (cancelled) eng.cancel();   // cancel() raced ahead of engine creation
 
@@ -72,7 +81,7 @@ public class DirEnumerator {
                     if (baseline.isEmpty()) {
                         if (stopped()) break;
                         if (dir.equals(root)) {
-                            onStatus.accept("target not responding, calibration failed for " + root);
+                            onStatus.accept("target not responding (or rate limiting), calibration failed for " + root);
                             api.logging().logToError("[DIR] calibration failed for " + root + ", scan aborted");
                             return;
                         }
@@ -80,7 +89,7 @@ public class DirEnumerator {
                         continue;
                     }
                     api.logging().logToOutput("[DIR] baseline " + dir + " " + baseline.get().describe());
-                    onStatus.accept("scanning " + dir + " ...");
+                    onStatus.accept("scanning " + dir + " ..." + (eng.backingOff() ? " (backing off, target rate limiting)" : ""));
 
                     totalHits += scanDir(dir, cfg, exts, baseline.get(), hit -> {
                         onHit.accept(hit);
@@ -93,7 +102,8 @@ public class DirEnumerator {
             }
             onStatus.accept((stopped() ? "stopped, " : "done, ") + totalHits + " found");
             api.logging().logToOutput("[DIR] finished, " + totalHits + " result(s)"
-                    + (eng.errorCount() > 0 ? ", " + eng.errorCount() + " request error(s)" : ""));
+                    + (eng.errorCount() > 0 ? ", " + eng.errorCount() + " request error(s)" : "")
+                    + (eng.pushBackCount() > 0 ? ", target rate limited " + eng.pushBackCount() + " time(s)" : ""));
         } finally {
             eng.shutdown();
         }

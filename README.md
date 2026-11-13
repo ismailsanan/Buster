@@ -47,6 +47,10 @@ DNS mode lists `Subdomain / Type / Value`.
 
 Status codes are colour coded (2xx green, 3xx cyan, 401/403 yellow, 5xx red), results stream in as they're found, and you can Copy them or Export to CSV (cells are escaped against spreadsheet formula injection).
 
+- **Filter** the view by hiding statuses (`404, 500-599`), hiding sizes, or matching a regex against the URL or redirect. Copy and Export use the filtered view.
+- **Right click** one or more hits to Send to Repeater, Send to Intruder, Add to site map, Copy URLs, or hide that size or status.
+- Tick **Add hits to site map** to push every new hit into Target > Site map as it arrives.
+
 
 
 ## Installation
@@ -72,10 +76,14 @@ The jar lands at `target/Buster.jar`. Then in Burp: Extensions, Add, type Java, 
 
 **DNS.** Enter the base domain, paste or load a subdomain wordlist, and start. Subdomains that resolve are listed with their IPs.
 
+**From anywhere in Burp.** Right click a request in Proxy, Target, Repeater or Logger and pick *Send to Buster* to pre-fill Dir (from that directory), Vhost (that host) or DNS (its domain). Nothing starts until you press Start.
+
+**Rate limiting.** Dir and Vhost take an optional *Req/s* limit (0 = none). Independently, when the target answers `429` (or `503` with `Retry-After`) Buster retries with a growing backoff and slows all threads down, then speeds back up as normal responses return. Rate-limit responses are never reported as hits.
+
 
 ## Roadmap
 
-Optional pushing of hits into Burp's site map for one click Repeater pivots. Response filtering by status, size, or regex.
+Live progress (requests/sec, ETA) with pause and resume. Persisted settings. Word/line count matching. Built-in wordlist presets. Seeding Dir mode from paths already in proxy history.
 
 
 ## Documentation

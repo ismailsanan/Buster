@@ -106,6 +106,40 @@ public final class UrlUtil {
         return !last.contains(".");
     }
 
+    /** "https://h:8443/a/b/c.php?x" -> "https://h:8443/a/b/", the directory a request lives in */
+    public static String directoryOf(String url) {
+        String base = normalizeTarget(url, false);
+        int schemeEnd = base.indexOf("://") + 3;
+        int lastSlash = base.lastIndexOf('/');
+        return lastSlash < schemeEnd ? base + "/" : base.substring(0, lastSlash + 1);
+    }
+
+    /** "https://h:8443/a/b" -> "https://h:8443" */
+    public static String originOf(String url) {
+        String base = normalizeTarget(url, false);
+        int pathStart = base.indexOf('/', base.indexOf("://") + 3);
+        return pathStart < 0 ? base : base.substring(0, pathStart);
+    }
+
+    /** host of a URL without port, brackets kept for IPv6 */
+    public static String hostOf(String url) {
+        String origin = originOf(url);
+        String hostPort = origin.substring(origin.indexOf("://") + 3);
+        if (hostPort.startsWith("[")) return hostPort.substring(0, hostPort.indexOf(']') + 1);
+        int colon = hostPort.lastIndexOf(':');
+        return colon < 0 ? hostPort : hostPort.substring(0, colon);
+    }
+
+    /**
+     * best guess at the base domain to enumerate under: "www.app.target.com"
+     * -> "app.target.com", "target.com" stays, IPs stay as they are
+     */
+    public static String parentDomain(String host) {
+        if (host.startsWith("[") || host.matches("\\d+(\\.\\d+){3}")) return host;
+        String[] labels = host.split("\\.");
+        return labels.length >= 3 ? host.substring(host.indexOf('.') + 1) : host;
+    }
+
     private static boolean isHex(byte b) {
         return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F');
     }

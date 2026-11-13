@@ -1,6 +1,7 @@
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 
+import ui.BusterContextMenu;
 import ui.DirPanel;
 import ui.DnsPanel;
 import ui.VhostPanel;
@@ -36,6 +37,7 @@ public class Buster implements BurpExtension {
         tabs.addTab("DNS",   dns.getComponent());
 
         api.userInterface().registerSuiteTab("Buster", tabs);
+        api.userInterface().registerContextMenuItemsProvider(new BusterContextMenu(api, tabs, dir, vhost, dns));
 
         // stop running scans and give their threads one shared bounded window (2s total) to exit, BApp Store requirement
         api.extension().registerUnloadingHandler(() -> {

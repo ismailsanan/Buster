@@ -15,6 +15,7 @@ public class VhostPanel {
     private final JTextField target = new JTextField("https://10.0.0.5");
     private final JTextField domain = new JTextField("target.com");
     private final JSpinner threads  = new JSpinner(new SpinnerNumberModel(10, 1, 50, 1));
+    private final JSpinner rps      = new JSpinner(new SpinnerNumberModel(0, 0, 1000, 5));
 
     private final WordlistPicker wordlist =
             new WordlistPicker("Paste subdomain words one per line, or Load File");
@@ -36,11 +37,17 @@ public class VhostPanel {
     public void cancel() { runner.cancel(); }
     public void cancelAndWait(long millis) { runner.cancelAndWait(millis); }
 
+    /** EDT only: fill target and base domain from another Burp tool */
+    public void prefill(String target, String domain) {
+        this.target.setText(target);
+        this.domain.setText(domain);
+    }
+
     private JPanel build() {
         Layouts.Form form = new Layouts.Form();
         form.field("Target (IP/host)", target);
         form.field("Base domain", domain);
-        form.row("Threads", threads, " ", new JLabel());
+        form.row("Threads", threads, "Req/s (0 = no limit)", rps);
         form.buttons(startBtn, stopBtn);
 
         startBtn.addActionListener(e -> start());
@@ -63,7 +70,8 @@ public class VhostPanel {
                     domain.getText().trim(),
                     wordlist.resolve(),
                     (int) threads.getValue(),
-                    headers.resolve());
+                    headers.resolve(),
+                    (int) rps.getValue());
         } catch (IllegalArgumentException ex) {
             results.status(ex.getMessage());
             return;

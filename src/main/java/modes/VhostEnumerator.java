@@ -28,7 +28,15 @@ public class VhostEnumerator {
             String domain,
             WordlistSource wordlist,
             int threads,
-            List<HttpEngine.HeaderKV> headers) {}
+            List<HttpEngine.HeaderKV> headers,
+            int requestsPerSecond) {
+
+        /** no rate limit */
+        public Config(String target, String domain, WordlistSource wordlist, int threads,
+                      List<HttpEngine.HeaderKV> headers) {
+            this(target, domain, wordlist, threads, headers, 0);
+        }
+    }
 
     private final MontoyaApi api;
     private volatile HttpEngine engine;
@@ -52,7 +60,7 @@ public class VhostEnumerator {
         List<HttpEngine.HeaderKV> headers = cfg.headers().stream()
                 .filter(h -> !h.name().equalsIgnoreCase("Host")).toList();
 
-        HttpEngine eng = new HttpEngine(api, "vhost", cfg.threads(), TIMEOUT_SECONDS, headers);
+        HttpEngine eng = new HttpEngine(api, "vhost", cfg.threads(), TIMEOUT_SECONDS, headers, cfg.requestsPerSecond());
         engine = eng;
         if (cancelled) eng.cancel();
 
@@ -62,7 +70,7 @@ public class VhostEnumerator {
             Optional<Baseline> calibrated = new BaselineDetector(eng).forVhost(url);
             if (calibrated.isEmpty()) {
                 if (!stopped()) {
-                    onStatus.accept("target not responding, calibration failed for " + url);
+                    onStatus.accept("target not responding (or rate limiting), calibration failed for " + url);
                     api.logging().logToError("[VHOST] calibration failed for " + url + ", scan aborted");
                 } else {
                     onStatus.accept("stopped, 0 found");
@@ -94,7 +102,8 @@ public class VhostEnumerator {
             }
             onStatus.accept((stopped() ? "stopped, " : "done, ") + found + " found");
             api.logging().logToOutput("[VHOST] finished, " + found + " found"
-                    + (eng.errorCount() > 0 ? ", " + eng.errorCount() + " request error(s)" : ""));
+                    + (eng.errorCount() > 0 ? ", " + eng.errorCount() + " request error(s)" : "")
+                    + (eng.pushBackCount() > 0 ? ", target rate limited " + eng.pushBackCount() + " time(s)" : ""));
         } finally {
             eng.shutdown();
         }

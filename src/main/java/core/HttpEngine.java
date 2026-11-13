@@ -28,6 +28,7 @@ public class HttpEngine {
     private static final int MAX_LOGGED_ERRORS = 5;
     private static final int BACKSTOP_SECONDS = 5;
     private static final long AWAIT_SLICE_NANOS = TimeUnit.MILLISECONDS.toNanos(200);
+    private static final int MAX_PUSHBACK_RETRIES = 2;
 
     private final MontoyaApi api;
     private final ExecutorService pool;
@@ -35,6 +36,8 @@ public class HttpEngine {
     private final List<HeaderKV> headers;
     private final RequestOptions options;
     private final AtomicInteger errors = new AtomicInteger();
+    private final AtomicInteger pushBacks = new AtomicInteger();
+    private final Throttle throttle;
     private volatile boolean cancelled = false;
 
     public record HeaderKV(String name, String value) {}
@@ -48,7 +51,14 @@ public class HttpEngine {
     public static final Filter KEEP_NONE = (s, l) -> false;
 
     public HttpEngine(MontoyaApi api, String name, int threads, int timeoutSeconds, List<HeaderKV> headers) {
+        this(api, name, threads, timeoutSeconds, headers, 0);
+    }
+
+    /** requestsPerSecond 0 = unlimited, 429/503 backoff applies either way */
+    public HttpEngine(MontoyaApi api, String name, int threads, int timeoutSeconds, List<HeaderKV> headers,
+                      int requestsPerSecond) {
         this.api = api;
+        this.throttle = new Throttle(requestsPerSecond);
         this.timeoutSeconds = timeoutSeconds;
         this.headers = mergeCookies(headers == null ? List.of() : headers);
         this.options = RequestOptions.requestOptions().withResponseTimeout(timeoutSeconds * 1000L);
@@ -59,6 +69,9 @@ public class HttpEngine {
     public boolean isCancelled() { return cancelled; }
     public void shutdown()       { pool.shutdownNow(); }
     public int errorCount()      { return errors.get(); }
+    /** responses where the target pushed back (429, or 503 with Retry-After) */
+    public int pushBackCount()   { return pushBacks.get(); }
+    public boolean backingOff()  { return throttle.backingOff(); }
 
     private HttpRequest build(String url) {
         HttpRequest req = HttpRequest.httpRequestFromUrl(url);
@@ -67,11 +80,33 @@ public class HttpEngine {
     }
 
     public Future<Probe> submit(String url, Filter keep) {
-        return submitTask(() -> reduce(api.http().sendRequest(build(url), options), keep));
+        return submitTask(() -> reduce(send(build(url)), keep));
     }
 
     public Future<Probe> submit(String url, String hostHeader, Filter keep) {
-        return submitTask(() -> reduce(api.http().sendRequest(build(url).withHeader("Host", hostHeader), options), keep));
+        return submitTask(() -> reduce(send(build(url).withHeader("Host", hostHeader)), keep));
+    }
+
+    /**
+     * paced send, retried with growing backoff when the target pushes back;
+     * null if it is still pushing back after the retries, so a rate-limit
+     * response is never mistaken for a hit
+     */
+    private HttpRequestResponse send(HttpRequest req) throws InterruptedException {
+        HttpRequestResponse rr;
+        for (int attempt = 0; attempt <= MAX_PUSHBACK_RETRIES && !cancelled; attempt++) {
+            throttle.acquire();
+            rr = api.http().sendRequest(req, options);
+            if (rr == null || !rr.hasResponse()) return rr;
+            boolean retryAfter = rr.response().headerValue("Retry-After") != null;
+            if (!Throttle.isPushBack(rr.response().statusCode(), retryAfter)) {
+                throttle.onSuccess();
+                return rr;
+            }
+            pushBacks.incrementAndGet();
+            throttle.onThrottled();
+        }
+        return null;
     }
 
     private static Probe reduce(HttpRequestResponse rr, Filter keep) {

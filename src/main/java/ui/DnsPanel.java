@@ -33,6 +33,9 @@ public class DnsPanel {
     public void cancel() { runner.cancel(); }
     public void cancelAndWait(long millis) { runner.cancelAndWait(millis); }
 
+    /** EDT only: fill the base domain from another Burp tool */
+    public void prefill(String domain) { this.domain.setText(domain); }
+
     private JPanel build() {
         JLabel note = new JLabel("<html>Uses the system DNS resolver,<br>not Burp's proxy / SOCKS settings.</html>");
         note.setForeground(Color.GRAY);
