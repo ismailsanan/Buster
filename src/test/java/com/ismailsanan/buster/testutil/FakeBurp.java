@@ -46,8 +46,6 @@ public final class FakeBurp {
     public final List<String> err = new CopyOnWriteArrayList<>();
     public final MontoyaApi api;
     private final Server server;
-    /** Burp scope as seen by the extension, everything is in scope unless a test says otherwise */
-    public volatile java.util.function.Predicate<String> inScope = url -> true;
 
     public FakeBurp(Server server) {
         installFactory();
@@ -62,14 +60,9 @@ public final class FakeBurp {
             if (!m.getName().equals("sendRequest")) throw new UnsupportedOperationException(m.toString());
             return send((HttpRequest) a[0]);
         });
-        burp.api.montoya.scope.Scope scope = proxy(burp.api.montoya.scope.Scope.class, (p, m, a) -> {
-            if (!m.getName().equals("isInScope")) throw new UnsupportedOperationException(m.toString());
-            return inScope.test((String) a[0]);
-        });
         this.api = proxy(MontoyaApi.class, (p, m, a) -> switch (m.getName()) {
             case "http" -> http;
             case "logging" -> logging;
-            case "scope" -> scope;
             default -> throw new UnsupportedOperationException(m.toString());
         });
     }

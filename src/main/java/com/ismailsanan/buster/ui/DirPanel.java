@@ -21,7 +21,6 @@ public class DirPanel {
     private final JSpinner rps          = new JSpinner(new SpinnerNumberModel(0, 0, 1000, 5));
     private final JCheckBox extOnRec    = new JCheckBox("Extensions on recursion", false);
     private final JCheckBox collapse    = new JCheckBox("Collapse duplicates", true);
-    private final JCheckBox inScope     = new JCheckBox("Only in-scope targets", true);
 
     private final WordlistPicker wordlist =
             new WordlistPicker("Paste paths one per line, or Load File (e.g. SecLists)");
@@ -58,7 +57,6 @@ public class DirPanel {
         form.row("Req/s (0 = no limit)", rps, " ", new JLabel());
         form.add(extOnRec);
         form.add(collapse);
-        form.add(inScope);
         form.buttons(startBtn, stopBtn);
 
         startBtn.addActionListener(e -> start());
@@ -85,8 +83,7 @@ public class DirPanel {
                     extOnRec.isSelected(),
                     collapse.isSelected(),
                     headers.resolve(),
-                    (int) rps.getValue(),
-                    inScope.isSelected());
+                    (int) rps.getValue());
         } catch (IllegalArgumentException ex) {
             results.status(ex.getMessage());
             return;

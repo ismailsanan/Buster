@@ -16,7 +16,6 @@ public class VhostPanel {
     private final JTextField domain = new JTextField("target.com");
     private final JSpinner threads  = new JSpinner(new SpinnerNumberModel(10, 1, 50, 1));
     private final JSpinner rps      = new JSpinner(new SpinnerNumberModel(0, 0, 1000, 5));
-    private final JCheckBox inScope = new JCheckBox("Only in-scope targets", true);
 
     private final WordlistPicker wordlist =
             new WordlistPicker("Paste subdomain words one per line, or Load File");
@@ -53,7 +52,6 @@ public class VhostPanel {
         form.field("Target (IP/host)", target);
         form.field("Base domain", domain);
         form.row("Threads", threads, "Req/s (0 = no limit)", rps);
-        form.add(inScope);
         form.buttons(startBtn, stopBtn);
 
         startBtn.addActionListener(e -> start());
@@ -77,8 +75,7 @@ public class VhostPanel {
                     wordlist.resolve(),
                     (int) threads.getValue(),
                     headers.resolve(),
-                    (int) rps.getValue(),
-                    inScope.isSelected());
+                    (int) rps.getValue());
         } catch (IllegalArgumentException ex) {
             results.status(ex.getMessage());
             return;

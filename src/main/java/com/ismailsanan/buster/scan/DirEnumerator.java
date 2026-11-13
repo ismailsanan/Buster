@@ -27,26 +27,14 @@ public class DirEnumerator {
             boolean extensionsOnRecursion,
             boolean collapseDuplicates,
             List<HttpEngine.HeaderKV> headers,
-            int requestsPerSecond,
-            boolean inScopeOnly) {
+            int requestsPerSecond) {
 
-        /** no rate limit, no scope check */
+        /** no rate limit */
         public Config(String target, WordlistSource wordlist, List<String> extensions, int maxDepth, int threads,
                       boolean extensionsOnRecursion, boolean collapseDuplicates, List<HttpEngine.HeaderKV> headers) {
-            this(target, wordlist, extensions, maxDepth, threads, extensionsOnRecursion, collapseDuplicates, headers, 0, false);
-        }
-
-        /** no scope check */
-        public Config(String target, WordlistSource wordlist, List<String> extensions, int maxDepth, int threads,
-                      boolean extensionsOnRecursion, boolean collapseDuplicates, List<HttpEngine.HeaderKV> headers,
-                      int requestsPerSecond) {
-            this(target, wordlist, extensions, maxDepth, threads, extensionsOnRecursion, collapseDuplicates, headers,
-                    requestsPerSecond, false);
+            this(target, wordlist, extensions, maxDepth, threads, extensionsOnRecursion, collapseDuplicates, headers, 0);
         }
     }
-
-    public static final String OUT_OF_SCOPE =
-            "target is not in Burp's scope: add it under Target > Scope, or untick \"Only in-scope targets\"";
 
     private final MontoyaApi api;
     private volatile HttpEngine engine;
@@ -65,11 +53,6 @@ public class DirEnumerator {
 
     public void scan(Config cfg, Consumer<EnumResult> onHit, Consumer<String> onStatus) {
         String root = UrlUtil.normalizeTarget(cfg.target(), true);
-        if (cfg.inScopeOnly() && !api.scope().isInScope(root)) {
-            onStatus.accept(OUT_OF_SCOPE);
-            api.logging().logToOutput("[DIR] " + root + " is out of scope, nothing sent");
-            return;
-        }
         HttpEngine eng = new HttpEngine(api, "dir", cfg.threads(), TIMEOUT_SECONDS, cfg.headers(),
                 cfg.requestsPerSecond());
         engine = eng;
@@ -112,12 +95,7 @@ public class DirEnumerator {
                         onHit.accept(hit);
                         if ("dir".equals(hit.extra())) {
                             String next = hit.name().endsWith("/") ? hit.name() : hit.name() + "/";
-                            if (!visitedDirs.add(next)) return;
-                            if (cfg.inScopeOnly() && !api.scope().isInScope(next)) {
-                                api.logging().logToOutput("[DIR] " + next + " is out of scope, not recursed");
-                                return;
-                            }
-                            frontier.add(next);
+                            if (visitedDirs.add(next)) frontier.add(next);
                         }
                     });
                 }

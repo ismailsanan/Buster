@@ -29,13 +29,12 @@ public class VhostEnumerator {
             WordlistSource wordlist,
             int threads,
             List<HttpEngine.HeaderKV> headers,
-            int requestsPerSecond,
-            boolean inScopeOnly) {
+            int requestsPerSecond) {
 
-        /** no rate limit, no scope check */
+        /** no rate limit */
         public Config(String target, String domain, WordlistSource wordlist, int threads,
                       List<HttpEngine.HeaderKV> headers) {
-            this(target, domain, wordlist, threads, headers, 0, false);
+            this(target, domain, wordlist, threads, headers, 0);
         }
     }
 
@@ -56,11 +55,6 @@ public class VhostEnumerator {
 
     public void scan(Config cfg, Consumer<EnumResult> onHit, Consumer<String> onStatus) {
         String url = UrlUtil.normalizeTarget(cfg.target(), false);
-        if (cfg.inScopeOnly() && !api.scope().isInScope(url)) {
-            onStatus.accept(DirEnumerator.OUT_OF_SCOPE);
-            api.logging().logToOutput("[VHOST] " + url + " is out of scope, nothing sent");
-            return;
-        }
         String domain = cfg.domain() == null ? "" : cfg.domain().trim();
         // a user supplied Host header would fight the one being enumerated
         List<HttpEngine.HeaderKV> headers = cfg.headers().stream()

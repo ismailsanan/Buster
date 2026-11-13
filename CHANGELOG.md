@@ -10,7 +10,6 @@ First release for BApp Store submission.
 - Dir: duplicate collapsing per directory only; directories are never hidden.
 - Vhost: custom headers and multi-probe calibration.
 - DNS: streamed lookups with bounded concurrency; wildcard IPs detected and filtered.
-- Optional "Only in-scope targets" (on by default) for Dir and Vhost, including recursion.
 - Optional requests-per-second limit; automatic backoff on 429 (and 503 with Retry-After).
 
 **Results**

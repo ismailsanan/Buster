@@ -26,15 +26,14 @@ Every mode also gives you:
 - **Burp integration**: right-click hits to send them to Repeater or Intruder, or add them to the site map. Right-click any request elsewhere in Burp to *Send to Buster*.
 - **Filters**: hide statuses (`404, 500-599`) or sizes, or match a regex. Copy and CSV export follow the filtered view.
 - **Authenticated scans**: cookies and auth headers are added to every request.
-- **Safe by default**: only in-scope targets, an optional request rate limit, and automatic backoff on `429`.
+- **Polite scanning**: an optional request rate limit and automatic backoff on `429`.
 - **Large wordlists**: files are streamed rather than loaded into memory, so multi-million-line lists like [SecLists](https://github.com/danielmiessler/SecLists) work.
 
 ## Quick start
 
 1. Download `Buster.jar` from the [latest release](https://github.com/ismailsanan/Buster/releases), or [build it](#building-from-source).
 2. In Burp go to **Extensions → Installed → Add**, choose type **Java** and select the jar.
-3. Open the **Buster** tab.
-4. Add your target under **Target → Scope**. Scans only run against in-scope targets unless you untick that option.
+3. Open the **Buster** tab, pick a mode, enter a target and a wordlist, and press **Start**.
 
 ## Usage
 
@@ -64,10 +63,11 @@ Right-click a request in Proxy, Target, Repeater or Logger and choose **Send to 
 | Option | Where | Default | Notes |
 |---|---|---|---|
 | Threads | all modes | 30 / 10 / 30 | Concurrent requests or lookups. |
+| Extensions | Dir | empty | File suffixes tried for every word: with `php, bak`, the word `admin` sends `admin`, `admin.php` and `admin.bak`. Empty = only the bare words. |
+| Depth | Dir | 1 | How many directory levels to recurse. `0` = scan only the target directory, `1` = also scan inside each directory found there, and so on. |
 | Req/s | Dir, Vhost | 0 (no limit) | A hard cap on requests per second across all threads. |
-| Only in-scope targets | Dir, Vhost | on | Refuses out-of-scope targets and never recurses outside your scope. |
 | Headers / Auth | Dir, Vhost | empty | One `Name: value` per line. A bare `a=b` line becomes a cookie. |
-| Extensions on recursion | Dir | off | Also try extensions inside discovered directories. |
+| Extensions on recursion | Dir | off | Recursion happens either way (controlled by Depth). This only decides whether the extensions are also tried inside discovered directories. Off = extensions at the top level only, bare words deeper down (much faster). |
 | Collapse duplicates | Dir | on | Hides repeated status+size responses within a directory. Directories are never hidden. |
 | Add hits to site map | results bar | off | Pushes every new hit into Target → Site map. |
 

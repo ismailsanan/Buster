@@ -23,7 +23,6 @@ Burp Suite extension (Montoya API, Java 17) for content discovery: directories, 
 | F15 | Optionally add every hit to Burp's site map as it arrives. |
 | F16 | "Send to Buster" from Burp's context menu pre-fills Dir, Vhost or DNS from a selected request. |
 | F17 | Optional requests-per-second limit for Dir and Vhost. |
-| F18 | "Only in-scope targets" (default on): Dir and Vhost refuse out-of-scope targets and Dir never recurses out of scope. |
 
 ## Non-functional requirements
 
