@@ -30,21 +30,55 @@ replay_pid*
 .DS_Store
 Thumbs.db
 
-# AI agents / assistant tooling
-graphify-out/
+# AI coding assistants / agent tooling (local only, never published)
+# Claude Code
 .claude/
+.claude*
 CLAUDE.md
 CLAUDE.local.md
+# Generic agent instruction / memory files
 AGENTS.md
+AGENT.md
 GEMINI.md
 .gemini/
+memory-bank/
+.specstory/
+.mcp.json
+mcp.json
+# Editors and agents with AI config folders
 .cursor/
 .cursorrules
+.cursorignore
 .windsurf/
 .windsurfrules
-.aider*
-.continue/
 .codeium/
+.continue/
+.cline/
+.clinerules
+.roo/
+.roomodes
+.kiro/
+.amazonq/
+.codex/
+.opencode/
+.junie/
+.trae/
+.augment/
+.goose/
+.tabnine/
+.aider*
 .copilot/
 .github/copilot-instructions.md
-.mcp.json
+.github/instructions/
+.github/prompts/
+.github/chatmodes/
+# Knowledge-graph / analysis output
+graphify-out/
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.jks

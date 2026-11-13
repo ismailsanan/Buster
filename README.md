@@ -1,98 +1,115 @@
-
-
-
 # Buster
 
-A Burp extension for content discovery: recursive directory brute forcing, virtual host discovery, and subdomain enumeration, without leaving Burp.
+[![CI](https://github.com/ismailsanan/Buster/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ismailsanan/Buster/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ismailsanan/Buster)](https://github.com/ismailsanan/Buster/releases)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-The idea is simple. Take the enumeration you'd normally do with standalone tools and run it through Burp's own HTTP stack instead. Same session, same scope, same proxy, and the results sit next to your traffic rather than in a separate terminal.
+**Content discovery inside Burp Suite.** Recursive directory brute forcing, virtual host discovery and subdomain enumeration, sent through Burp's own HTTP stack, with your session, your scope and your proxy settings. Results sit next to your traffic instead of in a separate terminal.
 
-Inspired by [gobuster](https://github.com/OJ/gobuster) and [feroxbuster](https://github.com/epi052/feroxbuster).
-
-**Why Buster:** it works in Burp Community as well as Professional, combines recursive directory, virtual host and DNS discovery in one tab, applies your session cookies / auth headers to every request, and every hit keeps its full request and response for inspection inside Burp.
-
+Works in **Burp Suite Community and Professional**. Inspired by [gobuster](https://github.com/OJ/gobuster) and [feroxbuster](https://github.com/epi052/feroxbuster).
 
 [POC.webm](https://github.com/user-attachments/assets/3b3ad8f9-61bd-48d0-8a0e-2db61ae4964d)
 
+---
 
+## Features
 
-## Modes
+| Mode | What it does |
+|---|---|
+| **Dir** | Recursive path brute forcing with extensions and adjustable depth. Calibrates every directory first, so soft 404s, catch-all routes and blanket 401/403 pages don't flood the results. |
+| **Vhost** | Varies the `Host` header against one IP to find virtual hosts. A junk-host baseline filters out wildcard responses. |
+| **DNS** | Actively brute forces subdomains and lists their A/AAAA records. Wildcard DNS is detected and filtered out. |
 
-**Dir** brute forces paths and recurses into directories it finds, rather than doing a single flat pass. It calibrates against each directory first, sending several random paths to learn what "not found" looks like, so catch all routing, custom 404 pages and blanket 403 responses don't drown the results. If calibration gets no response the scan stops (or skips that directory) instead of guessing. A `301` to `/admin/` is treated as a real directory and queued for recursion; other extensionless hits are only recursed into after `/name/` itself is confirmed to exist. Supports an extension list, adjustable depth, custom headers, and duplicate response collapsing (per directory, never hiding directories).
+Every mode also gives you:
 
-**Vhost** sends requests to one target IP while varying the Host header, revealing virtual hosts served from the same address. It baselines with a junk Host value first, so on a wildcard setup where everything responds, only genuinely different responses get reported. Because Burp separates the connection target from the Host header, you can point at an IP and ask it for `dev.target.com`, `staging.target.com`, and so on over the same connection. Custom headers are supported here too. Note: over HTTPS the TLS SNI is the target host, so servers that route purely on SNI will not reveal their vhosts this way.
+- **Live results**: a sortable table with colour-coded status codes and the full request and response for every HTTP hit.
+- **Burp integration**: right-click hits to send them to Repeater or Intruder, or add them to the site map. Right-click any request elsewhere in Burp to *Send to Buster*.
+- **Filters**: hide statuses (`404, 500-599`) or sizes, or match a regex. Copy and CSV export follow the filtered view.
+- **Authenticated scans**: cookies and auth headers are added to every request.
+- **Safe by default**: only in-scope targets, an optional request rate limit, and automatic backoff on `429`.
+- **Large wordlists**: files are streamed rather than loaded into memory, so multi-million-line lists like [SecLists](https://github.com/danielmiessler/SecLists) work.
 
-**DNS** resolves candidate subdomains against a base domain and reports the ones that exist, along with their IPs. Existing Burp subdomain tools only pull names already seen in traffic; this one actively brute forces them. Wildcard DNS is detected up front and names that only resolve to the wildcard IPs are filtered out.
+## Quick start
 
-> DNS lookups use the operating system resolver, not Burp's network stack, so upstream proxy / SOCKS settings do not apply to DNS mode.
-
-## Wordlists
-
-An Intruder style box in each mode. Paste words straight in, or hit Load File to pull in a local list such as [SecLists](https://github.com/danielmiessler/SecLists).
-
-
-## Results
-
-Dir and Vhost share one sortable table, styled after gobuster's output; selecting a row shows the full request and response:
-
-```
-Result                        Status  Size  Type  Redirect
-https://target/admin          301     178   dir   https://target/admin/
-https://target/config.php     200     1204  file
-https://target/.git/          200     452   dir
-```
-
-DNS mode lists `Subdomain / Type / Value`.
-
-
-Status codes are colour coded (2xx green, 3xx cyan, 401/403 yellow, 5xx red), results stream in as they're found, and you can Copy them or Export to CSV (cells are escaped against spreadsheet formula injection).
-
-- **Filter** the view by hiding statuses (`404, 500-599`), hiding sizes, or matching a regex against the URL or redirect. Copy and Export use the filtered view.
-- **Right click** one or more hits to Send to Repeater, Send to Intruder, Add to site map, Copy URLs, or hide that size or status.
-- Tick **Add hits to site map** to push every new hit into Target > Site map as it arrives.
-
-
-
-## Installation
-
-Build from source. Requires Java 17+ and Maven.
-
-```
-git clone https://github.com/ismailsanan/Buster
-cd Buster
-mvn clean package
-```
-
-
-The jar lands at `target/Buster.jar`. Prebuilt jars are attached to each [GitHub release](https://github.com/ismailsanan/Buster/releases). Then in Burp: Extensions, Add, type Java, select the jar, and open the Buster tab.
-
-
+1. Download `Buster.jar` from the [latest release](https://github.com/ismailsanan/Buster/releases), or [build it](#building-from-source).
+2. In Burp go to **Extensions → Installed → Add**, choose type **Java** and select the jar.
+3. Open the **Buster** tab.
+4. Add your target under **Target → Scope**. Scans only run against in-scope targets unless you untick that option.
 
 ## Usage
 
-**Dir.** Enter the target, paste or load a path wordlist, set your extensions, depth and thread count, and start. Hits stream in and directories are recursed automatically.
+### Dir
+1. Enter the target URL, for example `https://target.com/app/`.
+2. Paste paths or **Load File**, and optionally set extensions (`php, bak, txt`).
+3. Pick the depth and thread count, then press **Start**.
 
-**Vhost.** Enter the target IP or host and the base domain, paste or load a subdomain wordlist, and start. Real virtual hosts are reported and wildcard responses are filtered out.
+Hits stream in. Directories (a `301` to `/name/`, or a confirmed `/name/`) are scanned recursively up to the chosen depth, including dot-directories like `.git/`.
 
-**DNS.** Enter the base domain, paste or load a subdomain wordlist, and start. Subdomains that resolve are listed with their IPs.
+### Vhost
+1. Enter the target IP or host and the base domain (`target.com`).
+2. Paste or load a subdomain wordlist, then press **Start**.
 
-**From anywhere in Burp.** Right click a request in Proxy, Target, Repeater or Logger and pick *Send to Buster* to pre-fill Dir (from that directory), Vhost (that host) or DNS (its domain). Nothing starts until you press Start.
+Each word is sent as `word.target.com` in the `Host` header to the same address. Only responses that differ from the junk-host baseline are reported.
 
-**Rate limiting.** Dir and Vhost take an optional *Req/s* limit (0 = none). Independently, when the target answers `429` (or `503` with `Retry-After`) Buster retries with a growing backoff and slows all threads down, then speeds back up as normal responses return. Rate-limit responses are never reported as hits.
+### DNS
+1. Enter the base domain and a subdomain wordlist, then press **Start**.
 
+Names that resolve are listed with their IPs. Names that only resolve because of a wildcard record are filtered out.
+
+### From anywhere in Burp
+Right-click a request in Proxy, Target, Repeater or Logger and choose **Send to Buster**. This pre-fills Dir (from that directory), Vhost (that host) or DNS (its domain). Nothing is sent until you press Start.
+
+## Options
+
+| Option | Where | Default | Notes |
+|---|---|---|---|
+| Threads | all modes | 30 / 10 / 30 | Concurrent requests or lookups. |
+| Req/s | Dir, Vhost | 0 (no limit) | A hard cap on requests per second across all threads. |
+| Only in-scope targets | Dir, Vhost | on | Refuses out-of-scope targets and never recurses outside your scope. |
+| Headers / Auth | Dir, Vhost | empty | One `Name: value` per line. A bare `a=b` line becomes a cookie. |
+| Extensions on recursion | Dir | off | Also try extensions inside discovered directories. |
+| Collapse duplicates | Dir | on | Hides repeated status+size responses within a directory. Directories are never hidden. |
+| Add hits to site map | results bar | off | Pushes every new hit into Target → Site map. |
+
+When a target answers `429` (or `503` with `Retry-After`), Buster retries with growing backoff and slows every thread down, then speeds back up as normal responses return. Rate-limit responses are never shown as hits.
+
+## Good to know
+
+- **DNS mode uses your operating system's resolver**, not Burp's network stack, so upstream proxy and SOCKS settings don't apply to it.
+- **Vhost over HTTPS** sends the TLS SNI of the target, not the vhost name, so servers that route purely on SNI won't reveal their vhosts this way.
+- **Stop and unload are clean**: in-flight scans are cancelled and every thread exits.
+
+## Building from source
+
+Requires Java 17+ and Maven.
+
+```bash
+git clone https://github.com/ismailsanan/Buster
+cd Buster
+mvn clean verify        # builds and runs the test suite
+```
+
+The jar is written to `target/Buster.jar`.
+
+## Contributing
+
+- `dev` is the integration (staging) branch; `main` holds released code.
+- Open pull requests against `dev`. CI runs `mvn verify` on every push and pull request.
+- Releases are cut by tagging `vX.Y.Z` on `main`; see [CHANGELOG.md](CHANGELOG.md).
+- The design, requirements and architecture are described in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Roadmap
 
-Live progress (requests/sec, ETA) with pause and resume. Persisted settings. Word/line count matching. Built-in wordlist presets. Seeding Dir mode from paths already in proxy history.
-
-
-## Documentation
-
-See [docs/DESIGN.md](docs/DESIGN.md) for the functional and non-functional requirements and the architecture.
-
+- Live progress (requests/sec, ETA) with pause and resume
+- Settings that persist across Burp restarts
+- Word and line count matching
+- Built-in wordlist presets
+- Seeding Dir mode from paths already in proxy history
 
 ## Credits
 
-Inspired by [gobuster](https://github.com/OJ/gobuster) and [feroxbuster](https://github.com/epi052/feroxbuster). Buster reimplements their core ideas as a native Burp extension; all credit for the original tools goes to their authors.
+Buster reimplements the core ideas of [gobuster](https://github.com/OJ/gobuster) and [feroxbuster](https://github.com/epi052/feroxbuster) as a native Burp extension. All credit for the original tools goes to their authors.
 
+## License
 
+[Apache License 2.0](LICENSE)
