@@ -30,11 +30,15 @@ public class DirPanel {
     private final JButton startBtn = new JButton("Start");
     private final JButton stopBtn  = new JButton("Stop");
 
-    private final ScanRunner runner = new ScanRunner();
+    private final ScanRunner runner;
 
     public DirPanel(MontoyaApi api) {
         this.api = api;
         this.results = new ResultsTable(api);
+        this.runner = new ScanRunner(t -> {
+            results.status("error: " + t.getMessage());
+            api.logging().logToError("[DIR] scan failed", t);
+        });
         this.panel = build();
     }
 
@@ -87,14 +91,7 @@ public class DirPanel {
 
         DirEnumerator scan = new DirEnumerator(api);
         running(true);
-        runner.start("Buster-dir-scan", scan::cancel, () -> {
-            try {
-                scan.scan(cfg, results::addHit, results::status);
-            } catch (Exception ex) {
-                results.status("error: " + ex.getMessage());
-                api.logging().logToError("[DIR] scan failed", ex);
-            }
-        }, () -> running(false));
+        runner.start("Buster-dir-scan", scan::cancel, () -> scan.scan(cfg, results::addHit, results::status), () -> running(false));
     }
 
     static List<String> parseExtensions(String raw) {

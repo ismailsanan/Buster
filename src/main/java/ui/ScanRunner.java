@@ -2,14 +2,23 @@ package ui;
 
 import core.Threads;
 
+import java.util.function.Consumer;
+
 /**
  * owns the background thread of one mode panel, so Stop and extension unload
  * can always reach the running scan, even while it is still starting up
  */
 final class ScanRunner {
 
+    private final Consumer<Throwable> onError;
+
     private volatile Thread worker;
     private volatile Runnable canceller;
+
+    /** onError receives anything the scan body throws, so a failure is never lost to stderr */
+    ScanRunner(Consumer<Throwable> onError) {
+        this.onError = onError;
+    }
 
     boolean isRunning() {
         Thread t = worker;
@@ -21,6 +30,8 @@ final class ScanRunner {
         worker = Threads.startDaemon(threadName, () -> {
             try {
                 body.run();
+            } catch (Throwable t) {
+                try { onError.accept(t); } catch (Throwable ignored) {}
             } finally {
                 onFinish.run();
             }

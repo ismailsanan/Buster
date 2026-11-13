@@ -22,10 +22,14 @@ public class DnsPanel {
     private final JButton startBtn = new JButton("Start");
     private final JButton stopBtn  = new JButton("Stop");
 
-    private final ScanRunner runner = new ScanRunner();
+    private final ScanRunner runner;
 
     public DnsPanel(MontoyaApi api) {
         this.api = api;
+        this.runner = new ScanRunner(t -> {
+            results.status("error: " + t.getMessage());
+            api.logging().logToError("[DNS] scan failed", t);
+        });
         this.panel = build();
     }
 
@@ -69,14 +73,7 @@ public class DnsPanel {
 
         DnsEnumerator scan = new DnsEnumerator(api);
         running(true);
-        runner.start("Buster-dns-scan", scan::cancel, () -> {
-            try {
-                scan.scan(cfg, results::addHit, results::status);
-            } catch (Exception ex) {
-                results.status("error: " + ex.getMessage());
-                api.logging().logToError("[DNS] scan failed", ex);
-            }
-        }, () -> running(false));
+        runner.start("Buster-dns-scan", scan::cancel, () -> scan.scan(cfg, results::addHit, results::status), () -> running(false));
     }
 
     private void running(boolean on) {

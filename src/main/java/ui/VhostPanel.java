@@ -25,11 +25,15 @@ public class VhostPanel {
     private final JButton startBtn = new JButton("Start");
     private final JButton stopBtn  = new JButton("Stop");
 
-    private final ScanRunner runner = new ScanRunner();
+    private final ScanRunner runner;
 
     public VhostPanel(MontoyaApi api) {
         this.api = api;
         this.results = new ResultsTable(api);
+        this.runner = new ScanRunner(t -> {
+            results.status("error: " + t.getMessage());
+            api.logging().logToError("[VHOST] scan failed", t);
+        });
         this.panel = build();
     }
 
@@ -79,14 +83,7 @@ public class VhostPanel {
 
         VhostEnumerator scan = new VhostEnumerator(api);
         running(true);
-        runner.start("Buster-vhost-scan", scan::cancel, () -> {
-            try {
-                scan.scan(cfg, results::addHit, results::status);
-            } catch (Exception ex) {
-                results.status("error: " + ex.getMessage());
-                api.logging().logToError("[VHOST] scan failed", ex);
-            }
-        }, () -> running(false));
+        runner.start("Buster-vhost-scan", scan::cancel, () -> scan.scan(cfg, results::addHit, results::status), () -> running(false));
     }
 
     private void running(boolean on) {

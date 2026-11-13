@@ -14,8 +14,9 @@ import static org.junit.jupiter.api.Assertions.*;
 class ScanRunnerTest {
 
     @Test
-    void workerIsNamedDaemonAndOnFinishAlwaysRuns() throws Exception {
-        ScanRunner runner = new ScanRunner();
+    void workerIsNamedDaemonAndFailuresGoToOnError() throws Exception {
+        CompletableFuture<Throwable> error = new CompletableFuture<>();
+        ScanRunner runner = new ScanRunner(error::complete);
         CompletableFuture<Thread> worker = new CompletableFuture<>();
         CountDownLatch finished = new CountDownLatch(1);
         runner.start("Buster-test-scan", () -> {}, () -> {
@@ -26,11 +27,12 @@ class ScanRunnerTest {
         assertEquals("Buster-test-scan", t.getName());
         assertTrue(t.isDaemon());
         assertTrue(finished.await(5, TimeUnit.SECONDS), "onFinish must run even when the body throws");
+        assertEquals("boom", error.get(5, TimeUnit.SECONDS).getMessage(), "the failure goes to onError, not stderr");
     }
 
     @Test
     void cancelAndWaitCancelsInterruptsAndJoins() throws Exception {
-        ScanRunner runner = new ScanRunner();
+        ScanRunner runner = new ScanRunner(t -> {});
         AtomicBoolean cancelled = new AtomicBoolean();
         AtomicBoolean interrupted = new AtomicBoolean();
         CountDownLatch running = new CountDownLatch(1);
@@ -49,7 +51,7 @@ class ScanRunnerTest {
 
     @Test
     void cancelAndWaitIsBoundedForAStuckWorker() throws Exception {
-        ScanRunner runner = new ScanRunner();
+        ScanRunner runner = new ScanRunner(t -> {});
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch running = new CountDownLatch(1);
         runner.start("Buster-test-stuck", () -> {}, () -> {
@@ -69,7 +71,7 @@ class ScanRunnerTest {
 
     @Test
     void cancelBeforeStartIsHarmless() {
-        ScanRunner runner = new ScanRunner();
+        ScanRunner runner = new ScanRunner(t -> {});
         runner.cancel();
         runner.cancelAndWait(100);
         assertFalse(runner.isRunning());
