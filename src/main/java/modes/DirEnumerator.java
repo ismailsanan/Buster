@@ -111,18 +111,22 @@ public class DirEnumerator {
         int hits = 0;
 
         Iterator<String> it = cfg.wordlist().words().iterator();
-        while (it.hasNext() && !stopped()) {
-            String word = UrlUtil.encodePath(it.next());
-            for (String ext : exts) {
-                String url = dirUrl + word + UrlUtil.encodePath(ext);
-                urls.add(url);
-                futures.add(engine.submit(url, baseline::isInteresting));
+        try {
+            while (it.hasNext() && !stopped()) {
+                String word = UrlUtil.encodePath(it.next());
+                for (String ext : exts) {
+                    String url = dirUrl + word + UrlUtil.encodePath(ext);
+                    urls.add(url);
+                    futures.add(engine.submit(url, baseline::isInteresting));
+                }
+                if (urls.size() >= BATCH || !it.hasNext()) {
+                    hits += drain(urls, futures, baseline, seen, cfg.collapseDuplicates(), onHit, stats);
+                    urls.clear();
+                    futures.clear();
+                }
             }
-            if (urls.size() >= BATCH || !it.hasNext()) {
-                hits += drain(urls, futures, baseline, seen, cfg.collapseDuplicates(), onHit, stats);
-                urls.clear();
-                futures.clear();
-            }
+        } finally {
+            WordlistSource.close(it);
         }
         api.logging().logToOutput("[DIR] " + dirUrl + " -> " + hits + " hit(s), " + stats.filtered
                 + " filtered, " + stats.collapsed + " collapsed, " + stats.noResponse + " no-response");

@@ -25,13 +25,22 @@ public final class UrlUtil {
         } catch (URISyntaxException e) {
             throw new IllegalArgumentException("invalid target URL: " + raw);
         }
-        if (uri.getHost() == null || uri.getHost().isBlank())
-            throw new IllegalArgumentException("target has no host: " + raw);
+        String hostPort;
+        if (uri.getHost() != null && !uri.getHost().isBlank()) {
+            hostPort = uri.getHost() + (uri.getPort() == -1 ? "" : ":" + uri.getPort());
+        } else {
+            // java.net.URI rejects '_' in host names (common for docker services), parse by hand
+            String auth = uri.getRawAuthority();
+            if (auth == null) throw new IllegalArgumentException("target has no host: " + raw);
+            auth = auth.substring(auth.lastIndexOf('@') + 1);
+            if (!auth.matches("[A-Za-z0-9._-]+(:\\d{1,5})?"))
+                throw new IllegalArgumentException("target has no valid host: " + raw);
+            hostPort = auth;
+        }
 
         String path = uri.getRawPath() == null || uri.getRawPath().isEmpty() ? "/" : uri.getRawPath();
         if (trailingSlash && !path.endsWith("/")) path += "/";
-        String port = uri.getPort() == -1 ? "" : ":" + uri.getPort();
-        return uri.getScheme().toLowerCase() + "://" + uri.getHost() + port + path;
+        return uri.getScheme().toLowerCase() + "://" + hostPort + path;
     }
 
     /**
@@ -55,13 +64,13 @@ public final class UrlUtil {
         return sb.toString();
     }
 
-    /** resolve a Location header against the URL that produced it */
+    /** resolve a Location header against the URL that produced it, the raw header when it cannot be parsed */
     public static String resolveLocation(String requested, String location) {
         if (location == null || location.isBlank()) return requested;
         try {
             return URI.create(requested).resolve(location.trim()).toString();
         } catch (IllegalArgumentException e) {
-            return requested;
+            return location.trim();
         }
     }
 
@@ -92,6 +101,8 @@ public final class UrlUtil {
         String path = pathOf(url);
         if (path.endsWith("/")) return true;
         String last = path.substring(path.lastIndexOf('/') + 1);
+        // dot-directories (.git, .svn, .well-known) have no extension
+        if (last.startsWith(".")) last = last.substring(1);
         return !last.contains(".");
     }
 

@@ -37,14 +37,15 @@ public class Buster implements BurpExtension {
 
         api.userInterface().registerSuiteTab("Buster", tabs);
 
-        // stop running scans and give their threads a bounded time to exit, BApp Store requirement
+        // stop running scans and give their threads one shared bounded window (2s total) to exit, BApp Store requirement
         api.extension().registerUnloadingHandler(() -> {
             dir.cancel();
             vhost.cancel();
             dns.cancel();
-            dir.cancelAndWait(UNLOAD_WAIT_MS);
-            vhost.cancelAndWait(UNLOAD_WAIT_MS);
-            dns.cancelAndWait(UNLOAD_WAIT_MS);
+            long deadline = System.currentTimeMillis() + UNLOAD_WAIT_MS;
+            dir.cancelAndWait(Math.max(1, deadline - System.currentTimeMillis()));
+            vhost.cancelAndWait(Math.max(1, deadline - System.currentTimeMillis()));
+            dns.cancelAndWait(Math.max(1, deadline - System.currentTimeMillis()));
             api.logging().logToOutput("Buster unloaded");
         });
 

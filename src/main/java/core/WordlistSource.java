@@ -56,36 +56,63 @@ public interface WordlistSource {
 
     static WordlistSource ofFile(Path path, long lineCount) {
         return new WordlistSource() {
-            public Iterable<String> words() {
-                return () -> new Iterator<>() {
-                    private final BufferedReader reader = open(path);
-                    private String next = advance();
-                    public boolean hasNext() { return next != null; }
-                    public String next() {
-                        if (next == null) throw new NoSuchElementException();
-                        String cur = next;
-                        next = advance();
-                        return cur;
-                    }
-                    private String advance() {
-                        try {
-                            String line;
-                            while ((line = readBoundedLine(reader)) != null) {
-                                String w = Wordlists.clean(line);
-                                if (w != null) return w;
-                            }
-                            reader.close();
-                            return null;
-                        } catch (IOException e) {
-                            try { reader.close(); } catch (IOException ignored) {}
-                            throw new UncheckedIOException(e);
-                        }
-                    }
-                };
-            }
+            public Iterable<String> words() { return () -> new FileIterator(open(path)); }
             public long estimatedSize() { return lineCount; }
             public String describe() { return path.getFileName() + " (" + lineCount + " lines)"; }
         };
+    }
+
+    /**
+     * close an iterator obtained from words() when a scan stops early, a no-op
+     * for in-memory sources, a file iterator otherwise only closes at end of file
+     */
+    static void close(Iterator<?> it) {
+        if (it instanceof AutoCloseable c) {
+            try { c.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    final class FileIterator implements Iterator<String>, AutoCloseable {
+        private final BufferedReader reader;
+        private String next;
+        private boolean closed;
+
+        FileIterator(BufferedReader reader) {
+            this.reader = reader;
+            this.next = advance();
+        }
+
+        public boolean hasNext() { return next != null; }
+
+        public String next() {
+            if (next == null) throw new NoSuchElementException();
+            String cur = next;
+            next = advance();
+            return cur;
+        }
+
+        private String advance() {
+            if (closed) return null;
+            try {
+                String line;
+                while ((line = readBoundedLine(reader)) != null) {
+                    String w = Wordlists.clean(line);
+                    if (w != null) return w;
+                }
+                close();
+                return null;
+            } catch (IOException e) {
+                close();
+                throw new UncheckedIOException(e);
+            }
+        }
+
+        @Override public void close() {
+            if (closed) return;
+            closed = true;
+            next = null;
+            try { reader.close(); } catch (IOException ignored) {}
+        }
     }
 
     private static BufferedReader open(Path path) {

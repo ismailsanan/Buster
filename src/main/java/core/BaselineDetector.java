@@ -48,8 +48,7 @@ public class BaselineDetector {
         }
         if (statuses.isEmpty()) return Optional.empty();
 
-        // the first responding probe defines the status, only same-status probes shape the length range
-        int status = statuses.get(0);
+        int status = dominantStatus(statuses);
         long min = Long.MAX_VALUE, max = Long.MIN_VALUE;
         for (int i = 0; i < statuses.size(); i++) {
             if (statuses.get(i).intValue() != status) continue;
@@ -58,6 +57,24 @@ public class BaselineDetector {
         }
         return Optional.of(new Baseline(status, min, max));
     }
+
+    /**
+     * most common status, ignoring transient ones (429, 5xx) when anything else
+     * answered, so one rate-limited probe cannot become the "not found" baseline
+     */
+    static int dominantStatus(List<Integer> statuses) {
+        java.util.Map<Integer, Integer> counts = new java.util.LinkedHashMap<>();
+        for (int s : statuses) counts.merge(s, 1, Integer::sum);
+        boolean anyStable = counts.keySet().stream().anyMatch(s -> !isTransient(s));
+        int best = statuses.get(0), bestCount = -1;
+        for (var e : counts.entrySet()) {
+            if (anyStable && isTransient(e.getKey())) continue;
+            if (e.getValue() > bestCount) { best = e.getKey(); bestCount = e.getValue(); }
+        }
+        return best;
+    }
+
+    private static boolean isTransient(int status) { return status == 429 || status >= 500; }
 
     private static String token(int len) {
         StringBuilder sb = new StringBuilder(len);

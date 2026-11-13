@@ -52,6 +52,7 @@ public class DnsEnumerator {
         pool = p;
         if (cancelled) p.shutdownNow();
 
+        Iterator<String> it = cfg.wordlist().words().iterator();
         int found = 0, filtered = 0;
         int[] failures = {0};
         try {
@@ -68,8 +69,6 @@ public class DnsEnumerator {
             CompletionService<List<DnsResult>> cs = new ExecutorCompletionService<>(p);
             int limit = Math.max(1, cfg.threads() * IN_FLIGHT_PER_THREAD);
             int inFlight = 0;
-            Iterator<String> it = cfg.wordlist().words().iterator();
-
             while (!stopped() && (it.hasNext() || inFlight > 0)) {
                 while (inFlight < limit && it.hasNext() && !stopped()) {
                     String host = it.next() + "." + domain;
@@ -104,6 +103,7 @@ public class DnsEnumerator {
             onStatus.accept((stopped() ? "stopped, " : "done, ") + found + " found" + tail);
             api.logging().logToOutput("[DNS] finished, " + found + " found" + tail);
         } finally {
+            WordlistSource.close(it);
             p.shutdownNow();
         }
     }

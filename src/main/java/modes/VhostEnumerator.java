@@ -77,16 +77,20 @@ public class VhostEnumerator {
             List<Future<HttpEngine.Probe>> futures = new ArrayList<>(BATCH);
 
             Iterator<String> it = cfg.wordlist().words().iterator();
-            while (it.hasNext() && !stopped()) {
-                String word = it.next();
-                String host = domain.isBlank() ? word : word + "." + domain;
-                hosts.add(host);
-                futures.add(eng.submit(url, host, baseline::differsFrom));
-                if (hosts.size() >= BATCH || !it.hasNext()) {
-                    found += drain(hosts, futures, baseline, onHit);
-                    hosts.clear();
-                    futures.clear();
+            try {
+                while (it.hasNext() && !stopped()) {
+                    String word = it.next();
+                    String host = domain.isBlank() ? word : word + "." + domain;
+                    hosts.add(host);
+                    futures.add(eng.submit(url, host, baseline::differsFrom));
+                    if (hosts.size() >= BATCH || !it.hasNext()) {
+                        found += drain(hosts, futures, baseline, onHit);
+                        hosts.clear();
+                        futures.clear();
+                    }
                 }
+            } finally {
+                WordlistSource.close(it);
             }
             onStatus.accept((stopped() ? "stopped, " : "done, ") + found + " found");
             api.logging().logToOutput("[VHOST] finished, " + found + " found"

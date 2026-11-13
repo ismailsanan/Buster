@@ -27,6 +27,7 @@ public class HttpEngine {
 
     private static final int MAX_LOGGED_ERRORS = 5;
     private static final int BACKSTOP_SECONDS = 5;
+    private static final long AWAIT_SLICE_NANOS = TimeUnit.MILLISECONDS.toNanos(200);
 
     private final MontoyaApi api;
     private final ExecutorService pool;
@@ -49,7 +50,7 @@ public class HttpEngine {
     public HttpEngine(MontoyaApi api, String name, int threads, int timeoutSeconds, List<HeaderKV> headers) {
         this.api = api;
         this.timeoutSeconds = timeoutSeconds;
-        this.headers = headers == null ? List.of() : List.copyOf(headers);
+        this.headers = mergeCookies(headers == null ? List.of() : headers);
         this.options = RequestOptions.requestOptions().withResponseTimeout(timeoutSeconds * 1000L);
         this.pool = Threads.fixedPool("Buster-" + name + "-http", threads);
     }
@@ -78,8 +79,32 @@ public class HttpEngine {
         int status = rr.response().statusCode();
         long length = rr.response().body().length();
         String location = rr.response().headerValue("Location");
-        HttpRequestResponse kept = keep.keep(status, length) ? rr.copyToTempFile() : null;
+        HttpRequestResponse kept = keep.keep(status, length) ? toTempFile(rr) : null;
         return new Probe(status, length, location, kept);
+    }
+
+    private static HttpRequestResponse toTempFile(HttpRequestResponse rr) {
+        try {
+            return rr.copyToTempFile();
+        } catch (RuntimeException e) {
+            return rr;   // keep the hit in memory rather than lose it
+        }
+    }
+
+    /** several Cookie lines would overwrite each other via withHeader, join them into one header */
+    static List<HeaderKV> mergeCookies(List<HeaderKV> in) {
+        List<HeaderKV> out = new java.util.ArrayList<>();
+        StringBuilder cookies = new StringBuilder();
+        for (HeaderKV h : in) {
+            if (h.name().equalsIgnoreCase("Cookie")) {
+                if (cookies.length() > 0) cookies.append("; ");
+                cookies.append(h.value());
+            } else {
+                out.add(h);
+            }
+        }
+        if (cookies.length() > 0) out.add(new HeaderKV("Cookie", cookies.toString()));
+        return List.copyOf(out);
     }
 
     private Future<Probe> submitTask(Callable<Probe> task) {
@@ -91,13 +116,27 @@ public class HttpEngine {
         }
     }
 
-    /** waits for a response, null on no response, timeout, cancellation or send failure */
+    /**
+     * waits for a response, null on no response, timeout, cancellation or send failure
+     *
+     * waits in short slices so cancel() is honoured promptly: shutdownNow drops
+     * queued tasks without completing their futures, a single long get() would
+     * otherwise sit out the whole timeout for every queued request
+     */
     public Probe await(Future<Probe> f) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds + BACKSTOP_SECONDS);
         try {
-            return f.get(timeoutSeconds + BACKSTOP_SECONDS, TimeUnit.SECONDS);
-        } catch (TimeoutException e) {
-            f.cancel(true);
-            return null;
+            while (true) {
+                long left = deadline - System.nanoTime();
+                try {
+                    return f.get(Math.min(left, AWAIT_SLICE_NANOS), TimeUnit.NANOSECONDS);
+                } catch (TimeoutException e) {
+                    if (cancelled || System.nanoTime() >= deadline) {
+                        f.cancel(true);
+                        return null;
+                    }
+                }
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             f.cancel(true);
