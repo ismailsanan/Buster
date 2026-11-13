@@ -23,6 +23,7 @@ Burp Suite extension (Montoya API, Java 17) for content discovery: directories, 
 | F15 | Optionally add every hit to Burp's site map as it arrives. |
 | F16 | "Send to Buster" from Burp's context menu pre-fills Dir, Vhost or DNS from a selected request. |
 | F17 | Optional requests-per-second limit for Dir and Vhost. |
+| F18 | "Only in-scope targets" (default on): Dir and Vhost refuse out-of-scope targets and Dir never recurses out of scope. |
 
 ## Non-functional requirements
 
@@ -41,13 +42,15 @@ Burp Suite extension (Montoya API, Java 17) for content discovery: directories, 
 
 ## Architecture
 
+All code lives in `com.ismailsanan.buster` (sources in `src/main/java`, tests mirror it in `src/test/java`).
+
 ```
-Buster (entry point, registers tab and unload handler)
+Buster (entry point, registers tab, context menu and unload handler)
  └─ ui/      DirPanel, VhostPanel, DnsPanel   → read input, start/stop through ScanRunner
              ResultsTable, DnsResultsTable    → live results, filters, right click actions, CsvExporter
              BusterContextMenu                → "Send to Buster" from other Burp tools
              WordlistPicker, HeadersPanel, Layouts
- └─ modes/   DirEnumerator, VhostEnumerator, DnsEnumerator  → scan logic per mode
+ └─ scan/    DirEnumerator, VhostEnumerator, DnsEnumerator  → scan logic per mode
  └─ core/    HttpEngine (thread pool + Burp HTTP), BaselineDetector/Baseline (calibration),
              Throttle (rate limit + backoff), ResultFilter, DnsResolver,
              WordlistSource (streaming), UrlUtil, Threads
@@ -55,10 +58,16 @@ Buster (entry point, registers tab and unload handler)
 
 **Flow:** panel (EDT) builds a `Config` → `ScanRunner` starts a daemon thread → the enumerator calibrates, streams the wordlist and submits requests to `HttpEngine` → hits are compared to the `Baseline` → results go to the table via `invokeLater`.
 
-## Branching
+## Branching, CI and releases
 
-- `main`: production; released builds only.
-- `dev`: staging; integration and testing before merging to `main`.
+- `dev`: staging; all work lands here first.
+- `main`: production; only receives tested changes from `dev`.
+- **CI** (`.github/workflows/ci.yml`): every push and PR to `dev` or `main` runs `mvn verify` and uploads the jar.
+- **Release** (`.github/workflows/release.yml`): pushing a tag `vX.Y.Z` that matches the pom version builds, tests and publishes a GitHub Release with `Buster.jar`.
+
+Recommended GitHub settings (Settings → Branches → add rule for `main`): require a pull request before merging, require the `CI / build` status check, and block force pushes.
+
+Release steps: bump `<version>` in `pom.xml`, add a `CHANGELOG.md` entry, merge to `main`, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 ## Build and test
 

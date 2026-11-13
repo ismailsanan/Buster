@@ -64,7 +64,7 @@ mvn clean package
 ```
 
 
-The jar lands at `target/Buster.jar`. Then in Burp: Extensions, Add, type Java, select the jar, and open the Buster tab.
+The jar lands at `target/Buster.jar`. Prebuilt jars are attached to each [GitHub release](https://github.com/ismailsanan/Buster/releases). Then in Burp: Extensions, Add, type Java, select the jar, and open the Buster tab.
 
 
 
