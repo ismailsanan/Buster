@@ -41,6 +41,13 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <java.awt.headless>true</java.awt.headless>
+                        <!-- set at JVM start: InetAddress reads it once, so a test cannot set it later -->
+                        <jdk.net.hosts.file>${project.basedir}/src/test/resources/dns-hosts.txt</jdk.net.hosts.file>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
         </plugins>
     </build>

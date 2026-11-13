@@ -47,7 +47,10 @@ All code lives in `com.ismailsanan.buster` (sources in `src/main/java`, tests mi
 ```
 Buster (entry point, registers tab, context menu and unload handler)
  └─ ui/      DirPanel, VhostPanel, DnsPanel   → read input, start/stop through ScanRunner
-             ResultsTable, DnsResultsTable    → live results, filters, right click actions, CsvExporter
+             ResultsTable<T> + ResultTableModel<T> + Column<T>
+                                              → one generic live table (sorting, counter, copy/export)
+             HttpResultsPanel                 → Dir/Vhost results: viewers, site map, built from
+                                                HttpFilterBar, HttpResultMenu, StatusRenderer
              BusterContextMenu                → "Send to Buster" from other Burp tools
              WordlistPicker, HeadersPanel, Layouts
  └─ scan/    DirEnumerator, VhostEnumerator, DnsEnumerator  → scan logic per mode

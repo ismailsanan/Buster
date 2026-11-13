@@ -26,7 +26,7 @@ public class DirPanel {
     private final WordlistPicker wordlist =
             new WordlistPicker("Paste paths one per line, or Load File (e.g. SecLists)");
     private final HeadersPanel headers = new HeadersPanel();
-    private final ResultsTable results;
+    private final HttpResultsPanel results;
 
     private final JButton startBtn = new JButton("Start");
     private final JButton stopBtn  = new JButton("Stop");
@@ -35,7 +35,7 @@ public class DirPanel {
 
     public DirPanel(MontoyaApi api) {
         this.api = api;
-        this.results = new ResultsTable(api);
+        this.results = new HttpResultsPanel(api);
         this.runner = new ScanRunner(t -> {
             results.status("error: " + t.getMessage());
             api.logging().logToError("[DIR] scan failed", t);

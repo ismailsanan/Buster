@@ -2,10 +2,12 @@ package com.ismailsanan.buster.ui;
 
 import burp.api.montoya.MontoyaApi;
 
+import com.ismailsanan.buster.core.DnsResult;
 import com.ismailsanan.buster.scan.DnsEnumerator;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
 
 public class DnsPanel {
 
@@ -17,7 +19,10 @@ public class DnsPanel {
 
     private final WordlistPicker wordlist =
             new WordlistPicker("Paste subdomain words one per line, or Load File");
-    private final DnsResultsTable results = new DnsResultsTable();
+    private final ResultsTable<DnsResult> results = new ResultsTable<>(List.of(
+            Column.<DnsResult>of("Subdomain", String.class, 240, DnsResult::host),
+            Column.<DnsResult>of("Type", String.class, 60, DnsResult::type),
+            Column.<DnsResult>of("Value", String.class, 260, DnsResult::value)), "buster_dns.csv");
 
     private final JButton startBtn = new JButton("Start");
     private final JButton stopBtn  = new JButton("Stop");

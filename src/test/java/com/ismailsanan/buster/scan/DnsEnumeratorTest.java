@@ -8,10 +8,7 @@ import org.junit.jupiter.api.Timeout;
 import com.ismailsanan.buster.testutil.FakeBurp;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.InetAddress;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -22,7 +19,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * DNS mode against a hosts file: jdk.net.hosts.file makes InetAddress answer
  * from a file instead of the OS resolver, so this runs offline and fast
- * (skipped if InetAddress was already initialised before the property was set)
+ * (src/test/resources/dns-hosts.txt, wired up in pom.xml)
  */
 @Timeout(60)
 class DnsEnumeratorTest {
@@ -32,17 +29,11 @@ class DnsEnumeratorTest {
     private static boolean hostsFileActive;
 
     static {
-        try {
-            Path hosts = Files.createTempFile("buster-hosts", ".txt");
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < NAMES; i++) sb.append("10.0.").append(i / 250).append('.').append(i % 250 + 1)
-                    .append(' ').append("w").append(i).append('.').append(DOMAIN).append('\n');
-            sb.append("10.9.9.9 www.").append(DOMAIN).append('\n');
-            Files.writeString(hosts, sb);
-            hosts.toFile().deleteOnExit();
-            System.setProperty("jdk.net.hosts.file", hosts.toString());
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+        // Maven sets jdk.net.hosts.file from pom.xml at JVM start; when run from an IDE, point it at the same
+        // resource here (works only if nothing resolved a name earlier in this JVM, otherwise the tests skip)
+        if (System.getProperty("jdk.net.hosts.file") == null) {
+            java.net.URL res = DnsEnumeratorTest.class.getResource("/dns-hosts.txt");
+            if (res != null) System.setProperty("jdk.net.hosts.file", res.getPath());
         }
     }
 
