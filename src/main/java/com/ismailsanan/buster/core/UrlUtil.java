@@ -131,13 +131,76 @@ public final class UrlUtil {
     }
 
     /**
-     * best guess at the base domain to enumerate under: "www.app.target.com"
-     * -> "app.target.com", "target.com" stays, IPs stay as they are
+     * "https://h:8443/x" -> "h:8443", "http://h/" -> "h", "https://h:443" -> "h":
+     * the address part of a target, without the scheme and without a port that
+     * is the scheme's default
      */
-    public static String parentDomain(String host) {
-        if (host.startsWith("[") || host.matches("\\d+(\\.\\d+){3}")) return host;
-        String[] labels = host.split("\\.");
-        return labels.length >= 3 ? host.substring(host.indexOf('.') + 1) : host;
+    public static String hostPortOf(String url) {
+        String origin = originOf(url);
+        boolean https = origin.startsWith("https://");
+        String hp = origin.substring(origin.indexOf("://") + 3);
+        String defaultPort = https ? ":443" : ":80";
+        return hp.endsWith(defaultPort) ? hp.substring(0, hp.length() - defaultPort.length()) : hp;
+    }
+
+    public static boolean isHttps(String url) {
+        return normalizeTarget(url, false).startsWith("https://");
+    }
+
+    /**
+     * a target typed as "10.0.0.5", "10.0.0.5:8080" or a full URL; when no scheme
+     * is typed the https flag decides it, a typed scheme always wins
+     */
+    public static String withScheme(String hostOrUrl, boolean https) {
+        if (hostOrUrl == null || hostOrUrl.isBlank()) throw new IllegalArgumentException("target is empty");
+        String t = hostOrUrl.trim();
+        if (t.matches("(?i)^https?://.*")) return normalizeTarget(t, false);
+        return normalizeTarget((https ? "https://" : "http://") + t, false);
+    }
+
+    private static boolean isIp(String host) {
+        return host.startsWith("[") || host.matches("\\d+(\\.\\d+){3}");
+    }
+
+    /** second-level labels that, under a two-letter country TLD, are part of the public suffix (co.uk, com.au ...) */
+    private static final java.util.Set<String> CC_SECOND_LEVEL = java.util.Set.of(
+            "co", "com", "net", "org", "gov", "edu", "ac", "gob", "mil", "nic", "or", "ne", "go", "gv", "nom", "sch", "ltd", "plc");
+
+    /**
+     * the registered domain a host belongs to, the last level worth enumerating
+     * under: "a.b.target.com" -> "target.com", "www.shop.co.uk" -> "shop.co.uk";
+     * IPs and single labels are returned as they are
+     */
+    public static String registrableDomain(String host) {
+        if (host == null) return "";
+        String h = host.trim().toLowerCase(java.util.Locale.ROOT).replaceAll("\\.+$", "");
+        if (h.isEmpty() || isIp(h)) return h;
+        String[] labels = h.split("\\.");
+        if (labels.length <= 2) return h;
+        String tld = labels[labels.length - 1];
+        String second = labels[labels.length - 2];
+        int keep = tld.length() == 2 && CC_SECOND_LEVEL.contains(second) ? 3 : 2;
+        if (labels.length <= keep) return h;
+        return String.join(".", java.util.Arrays.copyOfRange(labels, labels.length - keep, labels.length));
+    }
+
+    /**
+     * every level from the full host down to its registered domain, deepest
+     * first: "a.b.target.com" -> [a.b.target.com, b.target.com, target.com]
+     */
+    public static java.util.List<String> domainLevels(String host) {
+        String h = host == null ? "" : host.trim().toLowerCase(java.util.Locale.ROOT).replaceAll("\\.+$", "");
+        String root = registrableDomain(h);
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (h.isEmpty()) return out;
+        if (isIp(h)) { out.add(h); return out; }
+        String cur = h;
+        while (true) {
+            out.add(cur);
+            if (cur.equals(root) || !cur.contains(".")) break;
+            cur = cur.substring(cur.indexOf('.') + 1);
+        }
+        return out;
     }
 
     private static boolean isHex(byte b) {

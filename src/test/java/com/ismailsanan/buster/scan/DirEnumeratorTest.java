@@ -362,6 +362,92 @@ class DirEnumeratorTest {
         }
     }
 
+    // ---- show all, progress, auto-filter events, dead target ---------------------------
+
+    /** records what the UI would be told */
+    private static final class Events implements com.ismailsanan.buster.core.ScanEvents {
+        final List<com.ismailsanan.buster.core.Progress> progress = new CopyOnWriteArrayList<>();
+        final Map<String, com.ismailsanan.buster.core.Baseline> filters = Collections.synchronizedMap(new LinkedHashMap<>());
+        final List<String> log = new CopyOnWriteArrayList<>();
+        @Override public void progress(com.ismailsanan.buster.core.Progress p) { progress.add(p); }
+        @Override public void autoFilter(String where, com.ismailsanan.buster.core.Baseline b) { filters.put(where, b); }
+        @Override public void log(String line) { log.add(line); }
+    }
+
+    @Test
+    void showAllListsBaselineResponsesMarkedAsBaseline() {
+        Map<String, Resp> routes = Map.of("/admin", Resp.redirect(301, "/admin/"), "/x.txt", Resp.of(200, 5));
+        FakeBurp burp = new FakeBurp(site(Resp.of(404, 10), routes));
+        DirEnumerator.Config c = new DirEnumerator.Config(H, WordlistSource.ofList(List.of("a", "b", "admin", "x.txt")),
+                List.of(""), 0, 4, false, true, List.of(), 0, true);
+        Run r = run(new DirEnumerator(burp.api), c);
+        Map<String, String> got = r.byName();
+        assertEquals("baseline", got.get(H + "/a"));
+        assertEquals("baseline", got.get(H + "/b"), "show all must not collapse duplicates");
+        assertEquals("dir", got.get(H + "/admin"));
+        assertEquals("file", got.get(H + "/x.txt"));
+        assertEquals(404, r.hit(H + "/a").status());
+    }
+
+    @Test
+    void showAllDoesNotConfirmBaselineLookingWordsAsDirectories() {
+        // catch-all 200: every word looks like a directory candidate, only the real one may cost a / probe
+        Map<String, Resp> routes = Map.of("/real", Resp.of(200, 999), "/real/", Resp.of(200, 999));
+        FakeBurp burp = new FakeBurp(site(Resp.of(200, 50), routes));
+        DirEnumerator.Config c = new DirEnumerator.Config(H, WordlistSource.ofList(List.of("a", "b", "c", "real")),
+                List.of(""), 0, 4, false, true, List.of(), 0, true);
+        run(new DirEnumerator(burp.api), c);
+        long slashProbes = burp.sentUrls().stream().filter(u -> u.endsWith("/") && !u.equals(H + "/")).count();
+        assertEquals(1, slashProbes, burp.sentUrls().toString());
+    }
+
+    @Test
+    void reportsAutoFilterAndProgressPerDirectory() {
+        Map<String, Resp> routes = Map.of("/admin", Resp.redirect(301, "/admin/"));
+        FakeBurp burp = new FakeBurp((url, host) -> {
+            String p = UrlUtil.pathOf(url);
+            if (routes.containsKey(p)) return routes.get(p);
+            return p.startsWith("/admin/") ? Resp.of(403, 77) : Resp.of(404, 10);
+        });
+        Events ev = new Events();
+        List<String> words = List.of("admin", "a", "b", "c");
+        Run r = new Run();
+        new DirEnumerator(burp.api).events(ev).scan(cfg(H, words, 1, true), r.hits::add, r.status::add);
+
+        assertEquals(404, ev.filters.get(H + "/").status());
+        assertEquals(403, ev.filters.get(H + "/admin/").status());
+        assertFalse(ev.progress.isEmpty());
+        com.ismailsanan.buster.core.Progress last = ev.progress.get(ev.progress.size() - 1);
+        assertEquals(words.size(), last.done());
+        assertEquals(words.size(), last.total());
+        assertTrue(last.label().startsWith("dir 2 of 2"), last.label());
+        assertTrue(ev.log.get(0).contains("auto-filter on"), ev.log.toString());
+    }
+
+    /**
+     * regression: a target that stops answering mid-scan (blackholed, VPN dropped)
+     * used to cost timeout + backstop per queued request, hours per batch; the
+     * scan must notice the stall and stop with a clear status
+     */
+    @Test
+    void deadTargetAbortsInsteadOfWaitingOutEveryRequest() {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        FakeBurp burp = new FakeBurp((url, host) -> {
+            if (url.contains("zz-nope-")) return Resp.of(404, 10);   // calibration answers
+            calls.incrementAndGet();
+            Thread.sleep(60_000);                                   // then the target goes silent
+            return Resp.of(404, 10);
+        });
+        List<String> words = new ArrayList<>();
+        for (int i = 0; i < 200; i++) words.add("w" + i);
+        long t0 = System.nanoTime();
+        Run r = run(new DirEnumerator(burp.api).timeoutSeconds(1).stallSeconds(2), cfg(H, words, 0, true));
+        long secs = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - t0);
+        assertTrue(secs < 15, "took " + secs + "s");
+        assertTrue(r.lastStatus().startsWith("target stopped answering"), r.status.toString());
+        assertTrue(calls.get() < 50, "kept sending into a dead target: " + calls.get());
+    }
+
     @SuppressWarnings("unused")
     private static <T> T unused(Function<T, T> f) { return null; }
 }

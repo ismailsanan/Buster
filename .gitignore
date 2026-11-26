@@ -14,6 +14,14 @@ bin/
 hs_err_pid*
 replay_pid*
 
+# Maven leftovers
+dependency-reduced-pom.xml
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+.mvn/timing.properties
+
 # IDEs
 .idea/
 *.iml
@@ -26,9 +34,13 @@ replay_pid*
 .mtj.tmp/
 *.ctxt
 
-# OS junk
+# OS / editor junk
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
+.#*
 
 # AI coding assistants / agent tooling (local only, never published)
 # Claude Code
@@ -74,6 +86,7 @@ mcp.json
 .github/chatmodes/
 # Knowledge-graph / analysis output
 graphify-out/
+.graphifyignore
 
 # Secrets
 .env

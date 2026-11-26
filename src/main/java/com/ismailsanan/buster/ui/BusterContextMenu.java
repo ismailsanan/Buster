@@ -15,7 +15,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * "Send to Buster" entries on Burp's right click menu (Proxy, Target,
+ * Extensions > Buster entries on Burp's right click menu (Proxy, Target,
  * Repeater, Logger ...): pre-fills a mode from the selected request and
  * switches to it, nothing starts until the user presses Start
  */
@@ -40,17 +40,19 @@ public class BusterContextMenu implements ContextMenuItemsProvider {
         Optional<String> url = selectedUrl(event);
         if (url.isEmpty()) return List.of();
         String u = url.get();
+        // Burp already lists these under Extensions > Buster, so the labels only say what they do
+        String host = UrlUtil.hostOf(u);
         return List.of(
-                item("Send to Buster: Dir scan from this directory", () -> {
+                item("Dir scan this directory", () -> {
                     dir.prefill(UrlUtil.directoryOf(u));
                     show(dir.getComponent());
                 }),
-                item("Send to Buster: Vhost scan this host", () -> {
-                    vhost.prefill(UrlUtil.originOf(u), UrlUtil.parentDomain(UrlUtil.hostOf(u)));
+                item("Vhost scan this host", () -> {
+                    vhost.prefill(u);
                     show(vhost.getComponent());
                 }),
-                item("Send to Buster: DNS scan this domain", () -> {
-                    dns.prefill(UrlUtil.parentDomain(UrlUtil.hostOf(u)));
+                item("DNS scan " + UrlUtil.registrableDomain(host), () -> {
+                    dns.prefill(host);
                     show(dns.getComponent());
                 }));
     }

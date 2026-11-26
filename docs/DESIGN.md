@@ -22,7 +22,9 @@ Burp Suite extension (Montoya API, Java 17) for content discovery: directories, 
 | F13 | Filter results by hidden statuses, hidden sizes and a regex; copy/export the filtered view. |
 | F14 | Right click hits: Send to Repeater / Intruder, add to site map, copy URLs, hide size/status. |
 | F15 | Optionally add every hit to Burp's site map as it arrives. |
-| F16 | "Send to Buster" from Burp's context menu pre-fills Dir, Vhost or DNS from a selected request. |
+| F16 | Burp's context menu (Extensions > Buster) pre-fills Dir, Vhost or DNS from a selected request; DNS/Vhost default to the registered domain and offer every level. |
+| F18 | Progress per mode (done/total, %, rate, ETA). |
+| F19 | Show what the auto-filter hides (status, size) per calibrated location; "Show all responses" disables it. |
 | F17 | Optional requests-per-second limit for Dir and Vhost. |
 
 ## Non-functional requirements
@@ -32,7 +34,7 @@ Burp Suite extension (Montoya API, Java 17) for content discovery: directories, 
 | Performance | Configurable thread pools; work is processed in bounded batches. |
 | Scalability | Memory stays flat with wordlist size: files are streamed, in-flight work is bounded, and HTTP exchanges are moved to Burp temp files. |
 | Responsiveness | Network work never runs on the Swing EDT; UI values are read on the EDT and passed to workers as immutable configs. |
-| Reliability | Per-request timeouts enforced by Burp; failed calibration aborts instead of flooding results; errors are logged, not swallowed. |
+| Reliability | Per-request timeouts enforced by Burp, backstop measured from when Burp got the request; a stalled engine (no response for 3x timeout + 5s) aborts the scan; failed calibration aborts instead of flooding results; errors are logged, not swallowed. |
 | Politeness | 429 (and 503 with Retry-After) triggers retries with shared exponential backoff (250ms to 5s) that decays on success; rate-limit responses are never reported as hits. |
 | Lifecycle | Scans stop cleanly on Stop and on extension unload (cancel, interrupt, bounded join); all threads are named daemons. |
 | Security | Server data is treated as untrusted; CSV export is escaped against formula injection; no data leaves Burp other than the scan traffic itself. |
@@ -51,7 +53,8 @@ Buster (entry point, registers tab, context menu and unload handler)
                                               → one generic live table (sorting, counter, copy/export)
              HttpResultsPanel                 → Dir/Vhost results: viewers, site map, built from
                                                 HttpFilterBar, HttpResultMenu, StatusRenderer
-             BusterContextMenu                → "Send to Buster" from other Burp tools
+             BusterContextMenu                → Extensions > Buster entries in other Burp tools
+             UiScanEvents, ScanLog            → progress bar, auto-filter line, scan log
              WordlistPicker, HeadersPanel, Layouts
  └─ scan/    DirEnumerator, VhostEnumerator, DnsEnumerator  → scan logic per mode
              BurpHostProber                                  → DNS mode's "via Burp" probing

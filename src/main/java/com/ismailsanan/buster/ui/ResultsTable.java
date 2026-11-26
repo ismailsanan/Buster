@@ -39,6 +39,8 @@ public class ResultsTable<T> {
     private final JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT));
     private final JLabel counter = new JLabel("0 found");
     private final JLabel statusBanner = new JLabel("Idle");
+    private final JProgressBar progressBar = new JProgressBar(0, 100);
+    private final JLabel autoFilter = new JLabel(" ");
 
     private Consumer<T> onSelect = row -> {};
     private Runnable onClear = () -> {};
@@ -73,9 +75,24 @@ public class ResultsTable<T> {
         });
 
         statusBanner.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        statusBanner.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
+        statusBanner.setBorder(BorderFactory.createEmptyBorder(4, 6, 2, 6));
         statusBanner.putClientProperty("html.disable", Boolean.TRUE);
-        top.add(statusBanner, BorderLayout.NORTH);
+        progressBar.setStringPainted(true);
+        progressBar.setString("not started");
+        progressBar.setFont(new Font("Monospaced", Font.PLAIN, 11));
+        progressBar.setToolTipText("Progress of the current directory / wordlist pass");
+        autoFilter.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        autoFilter.setBorder(BorderFactory.createEmptyBorder(2, 6, 4, 6));
+        autoFilter.putClientProperty("html.disable", Boolean.TRUE);
+
+        JPanel head = new JPanel(new BorderLayout());
+        head.add(statusBanner, BorderLayout.NORTH);
+        JPanel bar1 = new JPanel(new BorderLayout());
+        bar1.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+        bar1.add(progressBar, BorderLayout.CENTER);
+        head.add(bar1, BorderLayout.CENTER);
+        head.add(autoFilter, BorderLayout.SOUTH);
+        top.add(head, BorderLayout.NORTH);
 
         JButton copy   = new JButton("Copy");
         JButton export = new JButton("Export CSV");
@@ -102,6 +119,45 @@ public class ResultsTable<T> {
         SwingUtilities.invokeLater(() -> {
             model.add(row);
             updateCounter();
+        });
+    }
+
+    /** any thread: show progress of the running scan, unit is "req" or "lookups" */
+    public void progress(com.ismailsanan.buster.core.Progress p, String unit) {
+        SwingUtilities.invokeLater(() -> {
+            progressBar.setIndeterminate(false);
+            progressBar.setValue(p.percent());
+            progressBar.setString(p.describe(unit));
+            progressBar.setToolTipText(p.label());
+            if (!p.label().isEmpty()) statusBanner.setText(p.label());
+        });
+    }
+
+    /** any thread: a scan is starting, nothing measured yet */
+    public void progressStarting() {
+        SwingUtilities.invokeLater(() -> {
+            progressBar.setValue(0);
+            progressBar.setIndeterminate(true);
+            progressBar.setString("calibrating ...");
+        });
+    }
+
+    /** any thread: the scan ended, keep the last numbers but show 100% only if it finished */
+    public void progressFinished(boolean complete) {
+        SwingUtilities.invokeLater(() -> {
+            progressBar.setIndeterminate(false);
+            if (complete) progressBar.setValue(100);
+            String cur = progressBar.getString();
+            String base = cur == null || cur.startsWith("calibrating") || cur.equals("not started") ? "" : cur.replaceAll(" \\| ETA .*$", "");
+            progressBar.setString((complete ? "finished" : "stopped") + (base.isEmpty() ? "" : ": " + base));
+        });
+    }
+
+    /** any thread: one line describing what is being hidden automatically */
+    public void autoFilter(String text, String tooltip) {
+        SwingUtilities.invokeLater(() -> {
+            autoFilter.setText(text);
+            autoFilter.setToolTipText(tooltip);
         });
     }
 

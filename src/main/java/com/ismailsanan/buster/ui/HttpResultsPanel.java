@@ -39,6 +39,8 @@ public class HttpResultsPanel {
     private final JCheckBox toSiteMap = new JCheckBox("Add hits to site map", false);
     private volatile boolean addToSiteMap = false;
     private final JComponent component;
+    private final ScanLog log = new ScanLog();
+    private final JTabbedPane viewers = new JTabbedPane();
 
     public HttpResultsPanel(MontoyaApi api) {
         this.api = api;
@@ -58,9 +60,12 @@ public class HttpResultsPanel {
         toSiteMap.addItemListener(e -> addToSiteMap = toSiteMap.isSelected());
         table.addToBar(toSiteMap);
 
-        JTabbedPane viewers = new JTabbedPane();
+        table.autoFilter(UiScanEvents.IDLE_HINT, null);
+
         viewers.addTab("Request", requestViewer.uiComponent());
         viewers.addTab("Response", responseViewer.uiComponent());
+        viewers.addTab("Scan log", log.getComponent());
+        viewers.setToolTipTextAt(2, "Scan settings, what was auto-filtered per directory, totals");
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, table.getComponent(), viewers);
         split.setResizeWeight(0.6);
         component = split;
@@ -70,6 +75,15 @@ public class HttpResultsPanel {
 
     /** any thread */
     public void status(String text) { table.status(text); }
+
+    /** EDT: a scan is starting, returns the sink for its progress / auto-filter / log events */
+    UiScanEvents beginScan(boolean dirMode, boolean showAll) {
+        viewers.setSelectedIndex(2);
+        return new UiScanEvents(table, log, "req", dirMode, showAll);
+    }
+
+    /** any thread */
+    void endScan(boolean complete) { table.progressFinished(complete); }
 
     /** any thread */
     public void addHit(EnumResult hit) {
@@ -86,6 +100,7 @@ public class HttpResultsPanel {
     private void show(EnumResult r) {
         HttpRequestResponse rr = r.exchange();
         if (rr == null) return;
+        if (viewers.getSelectedIndex() == 2) viewers.setSelectedIndex(1);
         if (rr.request() != null)  requestViewer.setRequest(rr.request());
         if (rr.response() != null) responseViewer.setResponse(rr.response());
     }

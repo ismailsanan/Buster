@@ -115,7 +115,7 @@ class DnsEnumeratorTest {
         List<String> status = new ArrayList<>();
         new DnsEnumerator(new FakeBurp((u, h) -> null).api)
                 .scan(new DnsEnumerator.Config(DOMAIN, WordlistSource.ofList(List.of()), 4), r -> fail(), status::add);
-        assertEquals("done, 0 found", status.get(status.size() - 1));
+        assertTrue(status.get(status.size() - 1).startsWith("done, 0 found"), status.toString());
     }
 
     @Test

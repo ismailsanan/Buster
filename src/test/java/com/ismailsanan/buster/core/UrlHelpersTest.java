@@ -23,11 +23,43 @@ class UrlHelpersTest {
     }
 
     @Test
-    void parentDomainGuess() {
-        assertEquals("app.target.com", UrlUtil.parentDomain("www.app.target.com"));
-        assertEquals("target.com", UrlUtil.parentDomain("www.target.com"));
-        assertEquals("target.com", UrlUtil.parentDomain("target.com"));
-        assertEquals("10.0.0.5", UrlUtil.parentDomain("10.0.0.5"));
-        assertEquals("[::1]", UrlUtil.parentDomain("[::1]"));
+    void registrableDomainIsTheLastLevel() {
+        assertEquals("target.com", UrlUtil.registrableDomain("www.app.target.com"));
+        assertEquals("a.com", UrlUtil.registrableDomain("a.a.a.com"));
+        assertEquals("target.com", UrlUtil.registrableDomain("www.target.com"));
+        assertEquals("target.com", UrlUtil.registrableDomain("target.com"));
+        assertEquals("target.com", UrlUtil.registrableDomain("WWW.Target.COM."));
+        assertEquals("shop.co.uk", UrlUtil.registrableDomain("a.b.shop.co.uk"));
+        assertEquals("site.com.au", UrlUtil.registrableDomain("www.site.com.au"));
+        assertEquals("target.io", UrlUtil.registrableDomain("x.target.io"));
+        assertEquals("10.0.0.5", UrlUtil.registrableDomain("10.0.0.5"));
+        assertEquals("[::1]", UrlUtil.registrableDomain("[::1]"));
+        assertEquals("localhost", UrlUtil.registrableDomain("localhost"));
+    }
+
+    @Test
+    void domainLevelsDeepestFirstDownToTheRegisteredDomain() {
+        assertEquals(java.util.List.of("a.a.a.com", "a.a.com", "a.com"), UrlUtil.domainLevels("a.a.a.com"));
+        assertEquals(java.util.List.of("www.app.target.com", "app.target.com", "target.com"),
+                UrlUtil.domainLevels("www.app.target.com"));
+        assertEquals(java.util.List.of("target.com"), UrlUtil.domainLevels("target.com"));
+        assertEquals(java.util.List.of("x.shop.co.uk", "shop.co.uk"), UrlUtil.domainLevels("x.shop.co.uk"));
+        assertEquals(java.util.List.of("10.0.0.5"), UrlUtil.domainLevels("10.0.0.5"));
+    }
+
+    @Test
+    void targetWithoutScheme() {
+        assertEquals("10.0.0.5", UrlUtil.hostPortOf("https://10.0.0.5/x"));
+        assertEquals("10.0.0.5", UrlUtil.hostPortOf("https://10.0.0.5:443/"));
+        assertEquals("10.0.0.5:8443", UrlUtil.hostPortOf("https://10.0.0.5:8443/"));
+        assertEquals("h:443", UrlUtil.hostPortOf("http://h:443/"));
+        assertEquals("h", UrlUtil.hostPortOf("http://h:80"));
+        assertTrue(UrlUtil.isHttps("https://h/"));
+        assertFalse(UrlUtil.isHttps("http://h/"));
+
+        assertEquals("https://10.0.0.5/", UrlUtil.withScheme("10.0.0.5", true));
+        assertEquals("http://10.0.0.5:8080/", UrlUtil.withScheme(" 10.0.0.5:8080 ", false));
+        assertEquals("http://h/", UrlUtil.withScheme("http://h", true), "a typed scheme wins");
+        assertThrows(IllegalArgumentException.class, () -> UrlUtil.withScheme("  ", true));
     }
 }

@@ -60,7 +60,14 @@ final class BurpHostProber {
     }
 
     Outcome scan(String domain, Iterator<String> words, Optional<Baseline> baseline, Consumer<DnsResult> onHit) {
+        return scan(domain, words, baseline, onHit, done -> {});
+    }
+
+    /** onProgress gets the number of names probed so far, after every batch */
+    Outcome scan(String domain, Iterator<String> words, Optional<Baseline> baseline, Consumer<DnsResult> onHit,
+                 java.util.function.LongConsumer onProgress) {
         int found = 0, filtered = 0;
+        long done = 0;
         List<String> hosts = new ArrayList<>(BATCH);
         while (words.hasNext() && !stopped.getAsBoolean()) {
             hosts.add(words.next() + "." + domain);
@@ -75,6 +82,8 @@ final class BurpHostProber {
                 onHit.accept(h.toResult());
                 found++;
             }
+            done += hosts.size();
+            onProgress.accept(done);
             hosts.clear();
         }
         return new Outcome(found, filtered);

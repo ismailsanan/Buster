@@ -58,6 +58,21 @@ final class Layouts {
             gbc(line);
             return this;
         }
+        /** bold heading that starts a group of fields */
+        Form section(String title) {
+            JLabel l = new JLabel(title);
+            l.setFont(l.getFont().deriveFont(Font.BOLD));
+            l.setBorder(BorderFactory.createEmptyBorder(y == 0 ? 0 : 8, 0, 0, 0));
+            gbc(l);
+            return this;
+        }
+        /** a plain label added as its own line, for text the panel updates live (an example of what is sent) */
+        Form example(JLabel label) {
+            label.putClientProperty("html.disable", Boolean.TRUE);
+            label.setForeground(new Color(0, 110, 150));
+            gbc(label);
+            return this;
+        }
         Form buttons(JComponent... buttons) {
             JPanel line = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
             for (JComponent b : buttons) line.add(b);
